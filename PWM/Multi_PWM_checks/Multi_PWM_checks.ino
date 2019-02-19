@@ -1,4 +1,4 @@
-#define DEBUG 1
+#define DEBUG 0
 
 //  ===================  GLOBAL DATA  ======================
 String inputString = "";         // a String to hold incoming data
@@ -26,6 +26,8 @@ void PwmFrequencyPin5();    // cmd 3
 unsigned int getPwmFrequency();
 void PwmPeriodPin5();
 void PwmUpDownTimePin5();
+void GenerateAdcReads();
+void __generateAdcReads(byte voltage, short reads, byte msdelay);
 
 void setup() {
   // reserve 200 bytes for the inputString:
@@ -89,7 +91,14 @@ void processString(String in)
             #endif
             PwmUpDownTimePin5();
             break;
-            
+
+        case 6:
+            #if (DEBUG == 1)
+            Serial.println("cmd ID 6");
+            #endif
+            GenerateAdcReads();
+            break;
+        
         default:
             break;
     }
@@ -111,6 +120,9 @@ int getStringID(String in)
 
     if(String("5") == in)
         return 5;
+
+    if(String("6") == in)
+        return 6;
         
     return 0;
 }
@@ -122,6 +134,7 @@ void showMenu()
     Serial.println("3. PWM frequency on pin 5");
     Serial.println("4. PWM period pin 5");
     Serial.println("5. PWM up and down period on pin 5");
+    Serial.println("6. Generate ADC reads");
     
     Serial.print("Command: ");
 }
@@ -211,6 +224,67 @@ unsigned int getPwmFrequency()
 
       // devide 1 second (in microseconds = 1.000.000) to 1 pwm cycle (high+low)
       return (1000000 / (upTime+downTime) );
+}
+
+void GenerateAdcReads()
+{
+    byte  pwmVoltage = 0;
+    short adcReads   = 0;
+    byte  adcDelays  = 0;
+
+    // step 1: set pwm desire voltage
+    Serial.print("\nPWM >>");
+    while (Serial.available() == 0); 
+    pwmVoltage = Serial.parseInt();
+    Serial.println(pwmVoltage);
+    while(Serial.read() >= 0) ; // flush the receive buffer
+
+    // step 2: set adc reads
+    Serial.print("ADC reads >>");
+    while (Serial.available() == 0); 
+    adcReads = Serial.parseInt();
+    if (adcReads > 100) adcReads = 100; // limit adc reads to 100
+    Serial.println(adcReads);
+    while(Serial.read() >= 0) ; // flush the receive buffer
+
+    // step 3: set adc delays
+    Serial.print("ADC delays [ms] >>");
+    while (Serial.available() == 0); 
+    adcDelays = Serial.parseInt();
+    Serial.println(adcDelays);
+    while(Serial.read() >= 0) ; // flush the receive buffer
+    
+    __generateAdcReads(pwmVoltage, adcReads, adcDelays);
+}
+
+void __generateAdcReads(byte voltage, short reads, byte msdelay)
+{
+    short readArray[101] = {0};
+    
+    analogWrite(outputPwmPin, voltage);
+    for(short i=0; i<reads; i++)
+    {
+        readArray[i] = analogRead(inputAdcPin);
+        delay(msdelay);
+    }
+
+    Serial.print("\n\nadcValues = [");
+    for(short i=0; i<reads; i++)
+    {
+        Serial.print(readArray[i]);
+        Serial.print(",");
+    }
+    Serial.println("]");
+
+    Serial.print("adcTimestamps = [");
+    int ts = 0;
+    for(short i=0; i<reads; i++)
+    {
+        Serial.print(ts);
+        Serial.print(",");
+        ts += msdelay;
+    }
+    Serial.print("]\n\n");
 }
 
 /*
