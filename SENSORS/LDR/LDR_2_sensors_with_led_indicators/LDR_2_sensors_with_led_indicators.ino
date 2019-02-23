@@ -31,6 +31,7 @@ unsigned long LedSwitchTimer;
 #define LED_SWITCH_TIMEOUT  700
 #define IS_TIMER_ELAPSED(timer,period)  (millis() >= (timer+period))
 
+// percentage LDR
 int percentLastL = 0;  // variable to store the value coming from the sensor 1
 int percentLastR = 0;  // variable to store the value coming from the sensor 2
 int percentL = 0;
@@ -39,6 +40,12 @@ int percentR = 0;
 
 unsigned int LdrChanges = 0;
 
+// servo motor data
+unsigned char servoPosition     = 0;
+unsigned char servoPositionPrev = 0;
+#define SERVO_MIN_LDR_DIFF  3   // eg: one LDR is 52% and the other one is 47%
+#define SERVO_MIN_POS_LOG   10
+
 #define CHECK_TASK_PERIOD(taskTimer,taskPeriod)     \
   if (millis() < (taskTimer+taskPeriod))  return;   \
   else  {                                           \
@@ -46,7 +53,9 @@ unsigned int LdrChanges = 0;
     START_CYCLE();                                  \
   }
 
+#define TASK_20_MS        20
 #define TASK_25_MS        25
+#define TASK_50_MS        50
 #define TASK_100_MS       100
 #define TASK_200_MS       200
 
@@ -54,10 +63,12 @@ unsigned int LdrChanges = 0;
 void Task01_ReadLdrSensors();
 void Task02_CompareLdrVariation();
 void Task03_LedProcess();
+void Task04_ServoProcess();
 
 unsigned long TaskTimer_ReadLdrSensors      = 0;
 unsigned long TaskTimer_CompareLdrVariation = 0;
 unsigned long TaskTimer_LedProcess          = 0;
+unsigned long TaskTimer_ServoProcess        = 0;
 
 
 void setup() {  
@@ -76,6 +87,9 @@ void loop() {
 
   // task 3: process LED commands
   Task03_LedProcess();
+
+  // task 4: process servo commands
+  Task04_ServoProcess();
 
   STOP_CYCLE();
 }
@@ -158,3 +172,55 @@ void Task03_LedProcess()
         digitalWrite(outLedRight,HIGH);
     }
 }
+
+void Task04_ServoProcess()
+{
+    CHECK_TASK_PERIOD(TaskTimer_ServoProcess, TASK_100_MS);
+
+    // go forward
+    if (percentL > percentR) {
+        char diff = abs((percentL-percentR));
+        if (diff > SERVO_MIN_LDR_DIFF) {
+            if (servoPosition>0) {
+                servoPosition-=3;
+                servoAxe1.write(servoPosition);
+                #if (DEBUG == 1)
+                LOG_CYCLE();
+                String info = String("Move >: ") + servoPosition;
+                Serial.println(info);
+                #endif
+            }
+        }
+    }
+
+    // go backward
+    if (percentR > percentL) {
+        char diff = abs((percentR-percentL));
+        if (diff > SERVO_MIN_LDR_DIFF) {
+            if (servoPosition<180) {
+                servoPosition+=3;
+                servoAxe1.write(servoPosition);
+                #if (DEBUG == 1)
+                LOG_CYCLE();
+                String info = String("Move <: ") + servoPosition;
+                Serial.println(info);
+                #endif
+            }
+        }
+    }
+
+    // servo position change will be monitored only for minimum 10 degres
+    char diff = abs(((int)servoPositionPrev - (int)servoPosition));
+    if (diff >= SERVO_MIN_POS_LOG) {
+        #if (DEBUG == 1)
+        LOG_CYCLE();
+        String info = String("Servo: ") + servoPosition;
+        Serial.println(info);
+        #endif
+
+        servoPositionPrev = servoPosition;
+    }
+    
+}
+
+
