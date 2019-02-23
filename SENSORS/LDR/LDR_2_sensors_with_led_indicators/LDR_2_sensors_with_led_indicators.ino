@@ -1,47 +1,160 @@
-/*
- * If the light is more intensive on the left sensor, turn on the left led
- * If the light is more intensive on the right sensor, turn on the right led
- */
+#include <Servo.h>
 
-byte sensorPin1 = A0;
-byte sensorPin2 = A1;
+// global debug switcher
+#define DEBUG 1
 
-byte outLedLeft  = 7;
-byte outLedRight = 8;
+// Pins where LDR sensors are connected
+#define sensorPinR        A0
+#define sensorPinL        A1
+
+// Pins where LED are connected
+#define outLedLeft        2
+#define outLedRight       4
+
+// Pin that controls servo motor
+#define servoControlPin   3
+#define servoWriteDelay   100
+#define servoWriteSteps   30
+
+// keep track how many times loop() function process something
+unsigned long LoopCycle     = 0;
+unsigned long LoopCyclePrev = 0;
+#define START_CYCLE()   if(LoopCycle == LoopCyclePrev)  LoopCycle++;
+#define STOP_CYCLE()    if(LoopCycle > LoopCyclePrev)   LoopCyclePrev = LoopCycle;
+#define LOG_CYCLE()     Serial.print(String("") + LoopCycle + ": ")
+
+// object that controls servo motor for axe 1 - horizontal movement
+Servo servoAxe1;
+
+// timer that keeps LEDs on for a certain period after update
+unsigned long LedSwitchTimer;
+#define LED_SWITCH_TIMEOUT  700
+#define IS_TIMER_ELAPSED(timer,period)  (millis() >= (timer+period))
 
 int percentLastL = 0;  // variable to store the value coming from the sensor 1
 int percentLastR = 0;  // variable to store the value coming from the sensor 2
 int percentL = 0;
 int percentR = 0;
+#define deltaLightIntensity 2
+
+unsigned int LdrChanges = 0;
+
+#define CHECK_TASK_PERIOD(taskTimer,taskPeriod)     \
+  if (millis() < (taskTimer+taskPeriod))  return;   \
+  else  {                                           \
+    taskTimer = millis();                           \
+    START_CYCLE();                                  \
+  }
+
+#define TASK_25_MS        25
+#define TASK_100_MS       100
+#define TASK_200_MS       200
+
+// ======================== Task list =====================
+void Task01_ReadLdrSensors();
+void Task02_CompareLdrVariation();
+void Task03_LedProcess();
+
+unsigned long TaskTimer_ReadLdrSensors      = 0;
+unsigned long TaskTimer_CompareLdrVariation = 0;
+unsigned long TaskTimer_LedProcess          = 0;
+
 
 void setup() {  
   Serial.begin(9600);
   pinMode(outLedLeft ,OUTPUT);
   pinMode(outLedRight,OUTPUT);
+  servoAxe1.attach(servoControlPin);
 }
 
 void loop() {
-  unsigned long sensorIntensityL = 0;
-  unsigned long sensorIntensityR = 0;
+  // task 1: read LDR sensors
+  Task01_ReadLdrSensors();
 
-  sensorIntensityL = analogRead(sensorPin1);
-  sensorIntensityR = analogRead(sensorPin2);
+  // task 2: compare new LDR sensors values
+  Task02_CompareLdrVariation();
 
-  percentL = (sensorIntensityL*100)/(sensorIntensityL+sensorIntensityR);
-  percentR = (sensorIntensityR*100)/(sensorIntensityL+sensorIntensityR);
+  // task 3: process LED commands
+  Task03_LedProcess();
 
-  if( (percentLastL != percentL) || (percentLastR != percentR) )
-  {
-      if(percentL > percentR) {
-          digitalWrite(outLedRight,LOW);
-          digitalWrite(outLedLeft,HIGH);
-      }
-      else {
-          digitalWrite(outLedLeft,LOW);
-          digitalWrite(outLedRight,HIGH);
-      }
-      
+  STOP_CYCLE();
+}
+
+void Task01_ReadLdrSensors()
+{
+    CHECK_TASK_PERIOD(TaskTimer_ReadLdrSensors, TASK_25_MS);
+
+    unsigned long sensorIntensityL = 0;
+    unsigned long sensorIntensityR = 0;
+  
+    sensorIntensityL = analogRead(sensorPinL);
+    sensorIntensityR = analogRead(sensorPinR);
+  
+    percentL = (sensorIntensityL*100)/(sensorIntensityL+sensorIntensityR);
+    percentR = (sensorIntensityR*100)/(sensorIntensityL+sensorIntensityR);
+
+    #if 0 //(DEBUG == 1)
+    LOG_CYCLE();
+    String info = String("Light: ") + sensorIntensityL + " - " +  sensorIntensityR;
+    Serial.println(info);
+    #endif
+}
+
+void Task02_CompareLdrVariation()
+{
+    CHECK_TASK_PERIOD(TaskTimer_CompareLdrVariation, TASK_25_MS);
+
+    // the light change sensitivity can be low or high
+    // low: detect all small changes
+    // high: detect bigger changes only
+    // this can be done by verify delta difference between current intensity and the latest one
+    // Delta can be between 1-6 (if is bigger then 6, then will be very hard to detect any chnage)
+
+    bool isDiffL = abs(percentLastL-percentL) >= deltaLightIntensity;
+    bool isDiffR = abs(percentLastR-percentR) >= deltaLightIntensity;
+
+    if( isDiffL || isDiffR )
+    {
+      LdrChanges++; // count how many times LDR changed
+      // difference is bigger then deltaLightIntensity
+      #if (DEBUG == 1)
+      LOG_CYCLE();
+      String info = String("L: ") + percentLastL + ">>" +  percentL
+      + " R: " + percentLastR + ">>" +  percentR;
+      Serial.println(info);
+      #endif
+
       percentLastL = percentL;
       percentLastR = percentR;
-  }
+    }
+}
+
+void Task03_LedProcess()
+{
+    CHECK_TASK_PERIOD(TaskTimer_LedProcess, TASK_100_MS);
+
+    if( LdrChanges > 0 )
+    {
+        LdrChanges = 0;
+        if(percentL > percentR) {
+            digitalWrite(outLedRight,HIGH);
+            digitalWrite(outLedLeft,LOW);
+        }
+        else {
+            digitalWrite(outLedLeft,HIGH);
+            digitalWrite(outLedRight,LOW);
+        }
+        LedSwitchTimer = millis();
+
+        #if (DEBUG == 1)
+        LOG_CYCLE();
+        String info = String("Led: ") + (percentL > percentR) + " - " +  (percentL < percentR);
+        Serial.println(info);
+        #endif
+    }
+    
+    if( IS_TIMER_ELAPSED(LedSwitchTimer, LED_SWITCH_TIMEOUT) ) {
+        digitalWrite(outLedLeft ,HIGH);
+        digitalWrite(outLedRight,HIGH);
+    }
 }
