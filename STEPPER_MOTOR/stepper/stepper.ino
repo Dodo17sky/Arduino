@@ -26,10 +26,11 @@ void loop() {
 void UseCustomMove()
 {
   unsigned long ts = 0;
-  mDelay = 2;
+  mDelay = 5;
+  int mSteps = 200;
 
   ts = millis();
-  for(int i=0; i<512; i++) {
+  for(int i=0; i<mSteps; i++) {
     delay(mDelay);
     digitalWrite(LINE1, HIGH);
     digitalWrite(LINE2, HIGH);
@@ -55,11 +56,11 @@ void UseCustomMove()
     digitalWrite(LINE4, HIGH);
   }
   ts = millis() - ts;
-  Serial.println(String("Full step > ") + ts);
+  Serial.println(String("Full step forward ") + ts);
   delay(2000);
 
   ts = millis();
-  for(int i=0; i<512; i++) {
+  for(int i=0; i<mSteps; i++) {
     delay(mDelay);
     digitalWrite(LINE1, HIGH);
     digitalWrite(LINE2, LOW);
@@ -85,7 +86,7 @@ void UseCustomMove()
     digitalWrite(LINE4, LOW);
   }
   ts = millis() - ts;
-  Serial.println(String("Full step < ") + ts);
+  Serial.println(String("Full step backward ") + ts);
   delay(2000);
 }
 
