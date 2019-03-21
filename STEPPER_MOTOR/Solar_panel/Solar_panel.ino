@@ -70,7 +70,6 @@ int           stepCounter     = 400;
 void loop() {
     Serial_Process();
     Motor_Process();
-    //stepperCmd();
 }
 
 uint8_t Serial_Process(void)
@@ -147,23 +146,6 @@ uint8_t Motor_Process(void)
         delay(cycleDelay);
     }
     return 0;
-}
-
-void stepperCmd()
-{
-    if(isEnabled == false)
-        return;
-          
-    for(Index=0; Index<stepTarget; Index++)
-    {
-        digitalWrite(MOTOR_STEP_PIN, HIGH);
-        delayMicroseconds(stepSpeed);
-        digitalWrite(MOTOR_STEP_PIN, LOW);
-        delayMicroseconds(stepSpeed);   
-    }
-    if(cycleDelay > 0) {
-        delay(cycleDelay);
-    }
 }
 
 void serialEvent() {
