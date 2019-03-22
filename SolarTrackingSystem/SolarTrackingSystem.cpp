@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include "MicroTimer.h"
 
 /***********************************************************************
  *                        GLOBAL DATA
@@ -14,6 +15,9 @@ unsigned long stepSpeed       = 1000;           // delay between steps [us]
 unsigned long cycleDelay      = 1000;           // delay between directions [ms]
 int           stepTarget      = 400;
 int           stepCounter     = 400;
+
+MicroTimer	  utMotorStepHigh;
+MicroTimer	  utMotorStepLow;
 
 /***********************************************************************
  *                        MACRO DEFINES
@@ -68,7 +72,12 @@ int           stepCounter     = 400;
   Motor_On();
   Motor_SetDirForward();
 
-  TM_START(tm_StepHigh);
+  // set motor speed => controlled by these two timers
+  utMotorStepHigh.setPeriod(stepSpeed);
+  utMotorStepLow.setPeriod(stepSpeed);
+
+  // start high phase timer
+  utMotorStepHigh.restart();  // start() > you set a specific period; restart() > used already set period
 }
 
  /***********************************************************************
@@ -77,7 +86,6 @@ int           stepCounter     = 400;
 void loop() {
     Serial_Process();
     Motor_Process();
-    //stepperCmd();
 }
 
 /***********************************************************************
@@ -101,6 +109,9 @@ uint8_t Serial_Process(void)
 
         if(serialCommand == "spd") {
             Motor_SetSpeed( inputString.substring(3).toInt() );
+            // set motor speed => controlled by these two timers
+			utMotorStepHigh.setPeriod(stepSpeed);
+			utMotorStepLow.setPeriod(stepSpeed);
             #if (DEBUG_ON == 1)
             Serial.print(stepSpeed);
             #endif
@@ -140,18 +151,18 @@ uint8_t Serial_Process(void)
 uint8_t Motor_Process(void)
 {
     if( Motor_IsOff )
-        return;
+        return 0;
 
-    if( TM_DONE(tm_StepHigh, stepSpeed) ) {
+    if( utMotorStepHigh.done() ) {
         Motor_StepHigh();
-        TM_STOP(tm_StepHigh);
-        TM_START(tm_StepLow);
+        utMotorStepHigh.stop();
+        utMotorStepLow.restart();
     }
 
-    if( TM_DONE(tm_StepLow, stepSpeed) ) {
+    if( utMotorStepLow.done() ) {
         Motor_StepLow();
-        TM_STOP(tm_StepLow);
-        TM_START(tm_StepHigh);
+        utMotorStepHigh.restart();
+        utMotorStepLow.stop();
         stepCounter ++;
     }
 
