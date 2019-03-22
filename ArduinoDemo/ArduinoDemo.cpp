@@ -1,5 +1,9 @@
 #include <Arduino.h>
 
+/*
+ *   This is a demo Arduino project from Eclipse
+ */
+
 void setup() {
 	pinMode(13, OUTPUT);
 }
