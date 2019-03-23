@@ -16,11 +16,7 @@ unsigned long 	cycleDelay      = 1000;           // delay between directions [ms
 int           	stepTarget      = 400;			// number of steps for one cycle
 int           	stepCounter     = 0;            	// counter of steps done
 
-// debounce stopper pins
-Debouncer		verticalStopper;
-Debouncer		horizontalStopper;
-volatile unsigned long EndCntV	= 0;
-volatile unsigned long EndCntH	= 0;
+volatile signed long isrCounter = 0;
 
 MicroTimer	  	utMotorStepHigh;
 MicroTimer	  	utMotorStepLow;
@@ -45,6 +41,7 @@ MicroTimer	  	utMotorStepLow;
 
 #define     Motor_SetDirForward()   digitalWrite(MOTOR_DIR_PIN, HIGH); isMovingForward = true
 #define     Motor_SetDirBackward()  digitalWrite(MOTOR_DIR_PIN, LOW); isMovingForward = false
+#define     Motor_SetDirReverse()	digitalWrite(MOTOR_DIR_PIN, !isMovingForward); isMovingForward = !isMovingForward
 
 #define     Motor_StepHigh()        digitalWrite(MOTOR_STEP_PIN, HIGH)
 #define     Motor_StepLow()         digitalWrite(MOTOR_STEP_PIN, LOW)
@@ -204,33 +201,32 @@ uint8_t Motor_Process(void)
  ***********************************************************************/
 uint8_t EndsCheck_Process(void)
 {
-	static unsigned long lastEndCntV = 0;
-	static unsigned long lastEndCntH = 0;
-	static bool eventReady = false;
-	static bool ledState = true;
-	static int eventCounter = 0;
+	static unsigned long isrCounterOld = 0;
+	static unsigned long runTsOld = 0;
 
-	verticalStopper.tick(EndCntV-lastEndCntV);
-	lastEndCntV = EndCntV;
-	horizontalStopper.tick(EndCntH-lastEndCntH);
-	lastEndCntH = EndCntH;
+	unsigned long runTs = millis();
+	short pinState = digitalRead(ROT_STOPPER_PIN);
 
-	if(verticalStopper.isSteady()) {
-		if(eventReady == false) {
-			// debounce just finished
-			ledState = !ledState;
-			digitalWrite(ONBOARD_LED, ledState);
-
-			eventCounter ++;
-			Serial.print(String("\n event ") + eventCounter);
-
-			eventReady = true;
+	if( runTs > (runTsOld+50) )
+	{
+		if ( (isrCounterOld != isrCounter)  )
+		{
+			long diff = isrCounter - isrCounterOld;
+			if((pinState == 0)) {
+				Serial.println(String("Low ") + diff);
+				digitalWrite(ONBOARD_LED, HIGH);
+				Motor_Off();
+			}
+			else {
+				Serial.println(String("High ") + diff);
+				digitalWrite(ONBOARD_LED, LOW);
+				Motor_SetDirReverse();
+				Motor_On();
+			}
+			isrCounterOld = isrCounter;
 		}
+		runTsOld = runTs;
 	}
-	else {
-		eventReady = false;
-	}
-
 
 	return 0;
 }
@@ -240,7 +236,7 @@ uint8_t EndsCheck_Process(void)
  ***********************************************************************/
 void Stopper_Callback(void)
 {
-	EndCntV++;
+	isrCounter++;
 }
 
 /***********************************************************************
