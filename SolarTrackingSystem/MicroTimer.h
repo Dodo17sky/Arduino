@@ -19,5 +19,13 @@ public:  // public functions
 	void	restart();
 	bool	done(void);
 
+	/*
+	 *   ToDo: Find a way so that timer wont be affected by 32 bits overflow
+	 */
+
+	/*
+	 *   ToDo: Find a way to disable/enable all MicroTimer created
+	 */
+
 private: // private functions
 };
