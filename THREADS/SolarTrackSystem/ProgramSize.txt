@@ -1,0 +1,5 @@
+-------------------------------------------------------------------------
+11.05.2019: Thread library not added
+-----------------------
+Program store usage: 443 of maximum 32256 bytes
+Initial RAM usage: 8 of maximum 2048 bytes
