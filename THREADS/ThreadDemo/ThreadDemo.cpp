@@ -13,7 +13,6 @@
  *                        GLOBAL DATA
  ***********************************************************************/
 Thread		ledThread;        			// thread object
-Thread		msgTh25  ;        			// thread object
 Thread		msgTh100 ;        			// thread object
 Thread		msgTh1111;        			// thread object
 
@@ -25,12 +24,11 @@ String ts1111 = "";
  *                        Private functions
  ***********************************************************************/
 void led_Process_callback(void);
-void msg_P25_callback(void);
 void msg_P100_callback(void);
 void msg_P1111_callback(void);
 
 void setup() {
-	Serial.begin(57600);
+	Serial.begin(9600);
 	pinMode(ONBOARD_LED, OUTPUT);
 	ts25.reserve(300);
 	ts100.reserve(300);
@@ -38,7 +36,6 @@ void setup() {
 
 	//            thread obj , callback function   , interval
 	THREAD_SETUP ( ledThread , led_Process_callback, 1000   );
-	THREAD_SETUP ( msgTh25   , msg_P25_callback    , 25     );
 	THREAD_SETUP ( msgTh100  , msg_P100_callback   , 100    );
 	THREAD_SETUP ( msgTh1111 , msg_P1111_callback  , 1111   );
 }
@@ -46,7 +43,6 @@ void setup() {
 void loop() {
 
 	PROCESS_THREAD( ledThread );
-	PROCESS_THREAD( msgTh25   );
 	PROCESS_THREAD( msgTh100  );
 	PROCESS_THREAD( msgTh1111 );
 
@@ -62,23 +58,6 @@ void led_Process_callback(void)
 
 	digitalWrite(ONBOARD_LED, ledState);
 	Serial.println(String("Cool, I'm running ") + millis());
-}
-
-/***********************************************************************
- *                        msg_P25_callback
- ***********************************************************************/
-void msg_P25_callback(void)
-{
-	static int counter = 1;
-
-	ts25 += String(millis()) + " ";
-
-	if( (counter % 20) == 0) {  // trigger each 500 ms
-		Serial.println(String("Thread 25: ") + ts25);
-		ts25 = "";
-		counter = 1;
-	}
-	counter++;
 }
 
 /***********************************************************************
