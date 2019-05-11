@@ -3,3 +3,9 @@
 -----------------------
 Program store usage: 443 of maximum 32256 bytes
 Initial RAM usage: 8 of maximum 2048 bytes
+
+-------------------------------------------------------------------------
+11.05.2019: Import project from "Arduino\STEPPER_MOTOR\Solar_panel"
+-----------------------
+Program store usage: 5823 of maximum 32256 bytes
+Initial RAM usage: 313 of maximum 2048 bytes
