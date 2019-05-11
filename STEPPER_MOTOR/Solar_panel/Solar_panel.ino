@@ -4,7 +4,7 @@
  ***********************************************************************/
 String        inputString     = "";             // a String to hold incoming data
 boolean       stringComplete  = false;          // whether the string is complete
-boolean       isEnabled       = true;
+boolean       isEnabled;
 boolean       isMovingForward = true;           // the motor moving direction
 String        serialCommand;
 unsigned long Index;
@@ -21,6 +21,9 @@ int           stepCounter     = 400;
  #define      MOTOR_ENABLE_PIN        7
  #define      MOTOR_STEP_PIN          6
  #define      MOTOR_DIR_PIN           5
+ #define      END_DETECTOR_RIGHT      8
+ #define      END_DETECTOR_LEFT       9
+ #define      END_REACHED             LOW
 
  #define      Motor_On()              digitalWrite(MOTOR_ENABLE_PIN, LOW); isEnabled = true
  #define      Motor_Off()             digitalWrite(MOTOR_ENABLE_PIN, HIGH); isEnabled = false
@@ -52,24 +55,65 @@ int           stepCounter     = 400;
  ***********************************************************************/
  uint8_t Serial_Process(void);
  uint8_t Motor_Process(void);
+ uint8_t ReadInputs(void);
+ void    MoveExactly(uint16_t stepNumber);
 
  void setup() {
   inputString.reserve(200);             // reserve 200 bytes for the inputString:
- 
+
+  // setup stepper motor pins
   pinMode(MOTOR_ENABLE_PIN, OUTPUT);    // enable pin
   pinMode(MOTOR_DIR_PIN   , OUTPUT);    // step
   pinMode(MOTOR_STEP_PIN  , OUTPUT);    // direction
+
+  // setup ends detectors pins
+  pinMode(END_DETECTOR_LEFT , INPUT_PULLUP);
+  pinMode(END_DETECTOR_RIGHT, INPUT_PULLUP);
   
   Serial.begin(9600);
-  Motor_On();
+  Motor_Off();
   Motor_SetDirForward();
 
   TM_START(tm_StepHigh);
 }
 
 void loop() {
+    ReadInputs();
     Serial_Process();
     Motor_Process();
+}
+
+uint8_t ReadInputs(void)
+{
+    if( digitalRead(END_DETECTOR_LEFT ) == END_REACHED) {
+        Serial.println("Left stop");
+        Motor_Off();
+        Motor_SetDirForward();
+        delay(1000);
+        MoveExactly(80);
+        Motor_On();
+    }
+    if( digitalRead(END_DETECTOR_RIGHT) == END_REACHED) {
+        Serial.println("Right stop");
+        Motor_Off();
+        Motor_SetDirBackward();
+        delay(1000);
+        MoveExactly(80);
+        Motor_On();
+    }
+}
+
+void MoveExactly(uint16_t stepNumber)
+{
+    Motor_On();
+    for(uint16_t s=0; s<stepNumber; s++)
+    {
+        Motor_StepHigh();
+        delayMicroseconds(stepSpeed);
+        Motor_StepLow();
+        delayMicroseconds(stepSpeed);
+    }
+    Motor_Off();
 }
 
 uint8_t Serial_Process(void)
@@ -96,10 +140,12 @@ uint8_t Serial_Process(void)
         }
 
         if(serialCommand == ">>>") {
+            Serial.println("Move to right");
             Motor_SetDirForward();
         }
 
         if(serialCommand == "<<<") {
+            Serial.println("Move to left");
             Motor_SetDirBackward();
         }
 
