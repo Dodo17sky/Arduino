@@ -13,7 +13,7 @@
 /***********************************************************************
  *                        CONSTANT DATA
  ***********************************************************************/
-
+#define  ON_BOARD_LED_PIN		13
 
  /***********************************************************************
  *                        CUSTOM TIMERS
@@ -24,9 +24,13 @@
  ***********************************************************************/
 
  void setup() {
-
+	 pinMode(ON_BOARD_LED_PIN, OUTPUT);
+	 digitalWrite(ON_BOARD_LED_PIN, LOW);
 }
 
 void loop() {
-
+	digitalWrite(ON_BOARD_LED_PIN, HIGH);
+	delay(1000);
+	digitalWrite(ON_BOARD_LED_PIN, LOW);
+	delay(1000);
 }
