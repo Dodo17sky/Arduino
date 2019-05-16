@@ -8,14 +8,18 @@ String        inputString     = "";             // a String to hold incoming dat
 boolean       stringComplete  = false;          // whether the string is complete
 String        serialCommand;
 
-#define LINE1 9
-#define LINE2 4
-#define LINE3 3
-#define LINE4 2
+#define 	LINE1 					9
+#define 	LINE2 					4
+#define 	LINE3 					3
+#define 	LINE4 					2
 
-#define DEFAULT_STEPS_NUMBER	50
-#define DEFAULT_STEPS_DELAY 	50
-#define DEFAULT_STEPPER_SPEED	250
+#define 	DEFAULT_STEPS_NUMBER	4
+#define 	DEFAULT_STEPS_DELAY 	50
+#define 	DEFAULT_STEPPER_SPEED	250
+
+#define 	ENDS_H_FRONT			11
+#define 	ENDS_H_REAR				12
+#define     END_REACHED             LOW
 
 // stepper 28BYJ enable
 bool isStepper28BYJ_Enbaled;
@@ -30,17 +34,6 @@ const float GEAR_RED = 64;
 //const float STEPS_PER_OUT_REV = STEPS_PER_REV * GEAR_RED;
 const float STEPS_PER_OUT_REV = 512;
 
-// Define Variables
-
-// Number of Steps Required
-int StepsRequired;
-
-// Delay between steps
-int StepsDelay;
-
-// Motor speed
-int MotorSpeed;
-
 // Create Instance of Stepper Class
 // Specify Pins used for motor coils
 // The pins used are 8,9,10,11
@@ -49,8 +42,25 @@ int MotorSpeed;
 
 Stepper steppermotor(STEPS_PER_REV, LINE1, LINE3, LINE2, LINE4);
 
+// Number of Steps Required
+int StepsRequired;
+
+// reverse direction macro
+#define STEPPER_28BYJ_REVERSE()		StepsRequired = (-1) * StepsRequired
+// move exactly a number of steps
+#define	STEPPER_28BYJ_MOVE(nmb)		steppermotor.step((nmb)*StepsRequired)
+
+// Delay between steps
+int StepsDelay;
+
+// Motor speed
+int MotorSpeed;
+int tmpMotorSpeed;
+
 // motor process
 void Motor_Process();
+void ReadInputs();
+void Serial_Process();
 
 void setup()
 {
@@ -60,10 +70,22 @@ void setup()
 	StepsRequired = DEFAULT_STEPS_NUMBER;
 	StepsDelay = DEFAULT_STEPS_DELAY;
 	MotorSpeed = DEFAULT_STEPPER_SPEED;
+
+	pinMode(ENDS_H_FRONT, INPUT_PULLUP);
+	pinMode(ENDS_H_REAR , INPUT_PULLUP);
+
+	steppermotor.setSpeed(MotorSpeed);
 }
 
 void loop() {
 
+	Serial_Process();
+	Motor_Process();
+	ReadInputs();
+}
+
+void Serial_Process()
+{
 	if (stringComplete) {
 		serialCommand = inputString.substring(0,3);   // the first 3 characters define command type
 		Serial.print(String("\nCmd: ") + serialCommand + " ");
@@ -80,7 +102,7 @@ void loop() {
 		}
 
 		if(serialCommand == "rev") {
-			StepsRequired = (-1) * StepsRequired;
+			STEPPER_28BYJ_REVERSE();
 		}
 
 		if(serialCommand == "del") {
@@ -88,24 +110,41 @@ void loop() {
 		}
 
 		if(serialCommand == "spd") {
-			MotorSpeed = inputString.substring(3).toInt();
+			int tmpMotorSpeed;
+			tmpMotorSpeed = inputString.substring(3).toInt();
+			if(tmpMotorSpeed != MotorSpeed) {
+				MotorSpeed = tmpMotorSpeed;
+				steppermotor.setSpeed(MotorSpeed);
+			}
 		}
 
 		stringComplete = false;
 		while(Serial.read() >= 0) ; // flush the receive buffer
 		inputString = "";
 	}
-
-	Motor_Process();
-
 }
 
 void Motor_Process()
 {
 	if( isStepper28BYJ_Enbaled ) {
-		steppermotor.setSpeed(MotorSpeed);
 		steppermotor.step(StepsRequired);
-		delay(StepsDelay);
+	}
+}
+
+void ReadInputs()
+{
+	if( digitalRead(ENDS_H_FRONT) == LOW)
+	{
+		Serial.println("Front stop");
+		STEPPER_28BYJ_REVERSE();
+		STEPPER_28BYJ_MOVE(70);
+	}
+
+	if( digitalRead(ENDS_H_REAR) == LOW)
+	{
+		Serial.println("Rear stop");
+		STEPPER_28BYJ_REVERSE();
+		STEPPER_28BYJ_MOVE(70);
 	}
 }
 
