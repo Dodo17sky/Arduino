@@ -8,17 +8,17 @@ String        inputString     = "";             // a String to hold incoming dat
 boolean       stringComplete  = false;          // whether the string is complete
 String        serialCommand;
 
-#define 	LINE1 					9
-#define 	LINE2 					4
-#define 	LINE3 					3
-#define 	LINE4 					2
+#define 	LINE1 					13
+#define 	LINE2 					12
+#define 	LINE3 					11
+#define 	LINE4 					10
 
 #define 	DEFAULT_STEPS_NUMBER	4
 #define 	DEFAULT_STEPS_DELAY 	50
 #define 	DEFAULT_STEPPER_SPEED	250
 
-#define 	ENDS_H_FRONT			11
-#define 	ENDS_H_REAR				12
+#define 	ENDS_H_FRONT			9
+#define 	ENDS_H_REAR				8
 #define     END_REACHED             LOW
 
 // stepper 28BYJ enable
@@ -66,7 +66,7 @@ void setup()
 {
 	Serial.begin(9600);
 
-	isStepper28BYJ_Enbaled = false;
+	isStepper28BYJ_Enbaled = true;
 	StepsRequired = DEFAULT_STEPS_NUMBER;
 	StepsDelay = DEFAULT_STEPS_DELAY;
 	MotorSpeed = DEFAULT_STEPPER_SPEED;
@@ -75,6 +75,7 @@ void setup()
 	pinMode(ENDS_H_REAR , INPUT_PULLUP);
 
 	steppermotor.setSpeed(MotorSpeed);
+	delay(3000);
 }
 
 void loop() {
