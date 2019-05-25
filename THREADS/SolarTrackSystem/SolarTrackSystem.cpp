@@ -4,33 +4,51 @@
 #include <Arduino.h>
 #include <Thread.h>
 
+#define		DEBUG_ON                0
+
+/***********************************************************************
+ *                        GLOBAL TYPES
+ ***********************************************************************/
+typedef struct {
+	uint8_t Left 	: 1;
+	uint8_t Right	: 1;
+	uint8_t Front	: 1;
+	uint8_t Rear	: 1;
+} EndDetector;
+
 /***********************************************************************
  *                        GLOBAL DATA
  ***********************************************************************/
-String        inputString     = "";             // a String to hold incoming data
-boolean       stringComplete  = false;          // whether the string is complete
-boolean       isEnabled;
-boolean       isMovingForward = true;           // the motor moving direction
-String        serialCommand;
-unsigned long Index;
+#if (DEBUG_ON == 1)
+String      inputString     = "";             // a String to hold incoming data
+boolean     stringComplete  = false;          // whether the string is complete
+String      serialCommand;
+#endif
+boolean     isEnabled;
+boolean     isMovingForward = true;           // the motor moving direction
 
-unsigned long stepSpeed       = 1000;           // delay between steps [us]
-unsigned long cycleDelay      = 0;              // used for separated movements
+EndDetector Ends;
+
+unsigned long stepSpeed       = 4000;           // delay between steps [us]
 int           stepTarget      = 400;
 int           stepCounter     = 400;
 
 /***********************************************************************
  *                        MACRO DEFINES
  ***********************************************************************/
-#define 	PROCESS_THREAD(t)		if(t.shouldRun())	t.run()
-#define 	THREAD_SETUP(t,c,i)		t.onRun(c); t.setInterval(i)
+#if (DEBUG_ON == 1)
+#define		SERIAL(x)				Serial.print(x)
+#else
+#define		SERIAL(x)
+#endif
 
-#define		DEBUG_ON                1
-#define     MOTOR_ENABLE_PIN        7
-#define     MOTOR_STEP_PIN          6
+#define     MOTOR_ENABLE_PIN        3
+#define     MOTOR_STEP_PIN          4
 #define     MOTOR_DIR_PIN           5
-#define     END_DETECTOR_RIGHT      8
-#define     END_DETECTOR_LEFT       9
+#define     END_DETECTOR_RIGHT      7
+#define     END_DETECTOR_LEFT       6
+#define     END_DETECTOR_FRONT		9
+#define     END_DETECTOR_REAR		8
 #define     END_REACHED             LOW
 
 // Stepper motor Nema17 commands
@@ -62,16 +80,19 @@ unsigned long tm_StepLow       = 0;
 /***********************************************************************
  *                        Private functions
  ***********************************************************************/
+#if (DEBUG_ON == 1)
 void 	Serial_Process(void);
+#endif
 void 	Motor_Process(void);
 void 	ReadInputs(void);
 void    MoveExactly(uint16_t stepNumber);
+void 	GlobalData_Init(void);
 
 /***********************************************************************
  *                        setup() function
  ***********************************************************************/
 void setup() {
-	inputString.reserve(200);             // reserve 200 bytes for the inputString:
+	GlobalData_Init();
 
 	// setup stepper motor pins
 	pinMode(MOTOR_ENABLE_PIN, OUTPUT);    // enable pin
@@ -82,8 +103,13 @@ void setup() {
 	pinMode(END_DETECTOR_LEFT , INPUT_PULLUP);
 	pinMode(END_DETECTOR_RIGHT, INPUT_PULLUP);
 
+#if (DEBUG_ON == 1)
 	Serial.begin(9600);
-	Motor_Off();
+#endif
+
+	delay(3000);
+
+	Motor_On();
 	Motor_SetDirForward();
 
 	TM_START(tm_StepHigh);
@@ -94,8 +120,10 @@ void setup() {
  ***********************************************************************/
 void loop() {
 	ReadInputs();
-	Serial_Process();
 	Motor_Process();
+#if (DEBUG_ON == 1)
+	Serial_Process();
+#endif
 }
 
 /***********************************************************************
@@ -104,20 +132,31 @@ void loop() {
 void ReadInputs(void)
 {
 	if( digitalRead(END_DETECTOR_LEFT ) == END_REACHED) {
-		Serial.println("Left stop");
-		Motor_Off();
-		Motor_SetDirForward();
-		delay(1000);
-		MoveExactly(80);
-		Motor_On();
+		Ends.Left = 1;
 	}
+	else {
+		Ends.Left = 0;
+	}
+	
 	if( digitalRead(END_DETECTOR_RIGHT) == END_REACHED) {
-		Serial.println("Right stop");
-		Motor_Off();
-		Motor_SetDirBackward();
-		delay(1000);
-		MoveExactly(80);
-		Motor_On();
+		Ends.Right = 1;
+	}
+	else {
+		Ends.Right = 0;
+	}
+	
+	if( digitalRead(END_DETECTOR_FRONT ) == END_REACHED) {
+		Ends.Front = 1;
+	}
+	else {
+		Ends.Front = 0;
+	}
+
+	if( digitalRead(END_DETECTOR_REAR) == END_REACHED) {
+		Ends.Rear = 1;
+	}
+	else {
+		Ends.Rear = 0;
 	}
 }
 
@@ -140,6 +179,7 @@ void MoveExactly(uint16_t stepNumber)
 /***********************************************************************
  *                        Serial_Process() function
  ***********************************************************************/
+#if (DEBUG_ON == 1)
 void Serial_Process(void)
 {
     if (stringComplete) {
@@ -180,17 +220,12 @@ void Serial_Process(void)
             #endif
         }
 
-        if(serialCommand == "del") {
-            String tmp = inputString.substring(3);
-            cycleDelay = tmp.toInt();
-            Serial.print(cycleDelay);
-        }
-
         stringComplete = false;
         while(Serial.read() >= 0) ; // flush the receive buffer
         inputString = "";
     }
 }
+#endif
 
 /***********************************************************************
  *                        Motor_Process() function
@@ -200,6 +235,24 @@ void Motor_Process(void)
     if( Motor_IsOff )
         return;
 
+    if( Ends.Left) {
+    	SERIAL("Left stop\n");
+		Motor_Off();
+		Motor_SetDirForward();
+		delay(1000);
+		MoveExactly(80);
+		Motor_On();
+	}
+    else if( Ends.Right ) {
+    	SERIAL("Right stop\n");
+		Motor_Off();
+		Motor_SetDirBackward();
+		delay(1000);
+		MoveExactly(80);
+		Motor_On();
+	}
+
+    // Nema17  -  M A K E   N E X T   S T E P     -  START
     if( TM_DONE(tm_StepHigh, stepSpeed) ) {
         Motor_StepHigh();
         TM_STOP(tm_StepHigh);
@@ -212,16 +265,27 @@ void Motor_Process(void)
         TM_START(tm_StepHigh);
         stepCounter ++;
     }
+    // Nema17  -  M A K E   N E X T   S T E P     -  STOP
+}
 
-    if ( (cycleDelay > 0) && (stepCounter >= stepTarget) ) {
-        stepCounter = 0;
-        delay(cycleDelay);
-    }
+/***********************************************************************
+ *                        GlobalData_Init() function
+ ***********************************************************************/
+void GlobalData_Init(void)
+{
+#if (DEBUG_ON == 1)
+	inputString.reserve(200);			// reserve 200 bytes for the inputString:
+#endif
+	Ends.Left  = 0;
+	Ends.Right = 0;
+	Ends.Front = 0;
+	Ends.Rear  = 0;
 }
 
 /***********************************************************************
  *                        serialEvent()
  ***********************************************************************/
+#if (DEBUG_ON == 1)
 void serialEvent() {
 	while (Serial.available()) {
 		char inChar = (char)Serial.read();    // get the new byte:
@@ -234,3 +298,4 @@ void serialEvent() {
 		}
 	}
 }
+#endif
