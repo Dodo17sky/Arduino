@@ -1,163 +1,259 @@
+/***********************************************************************
+ *                        LIBRARIES
+ ***********************************************************************/
 #include <Arduino.h>
 #include <Stepper.h>
+#include "Motor28BYJ.h"
+
+#define		DEBUG_ON                1		// Compiler switch for Serial commands
+#define		MOTOR_ACTIVE_28BYJ	    1		// Compiler switch to deactivate all motor 28BYJ functionality
+#define		MOTOR_ACTIVE_NEMA17		0		// Compiler switch to deactivate all motor Nema17 functionality
+
+/***********************************************************************
+ *                        GLOBAL TYPES
+ ***********************************************************************/
+typedef struct {
+	uint8_t Left 	: 1;
+	uint8_t Right	: 1;
+	uint8_t Front	: 1;
+	uint8_t Rear	: 1;
+} EndDetector;
 
 /***********************************************************************
  *                        GLOBAL DATA
  ***********************************************************************/
-String        inputString     = "";             // a String to hold incoming data
-boolean       stringComplete  = false;          // whether the string is complete
-String        serialCommand;
+#if (DEBUG_ON == 1)
+String      inputString     = "";           // a String to hold incoming data
+boolean     stringComplete  = false;        // whether the string is complete
+String      serialCommand;
+#endif
 
-#define 	LINE1 					13
-#define 	LINE2 					12
-#define 	LINE3 					11
-#define 	LINE4 					10
+EndDetector Ends;
 
-#define 	DEFAULT_STEPS_NUMBER	4
-#define 	DEFAULT_STEPS_DELAY 	50
-#define 	DEFAULT_STEPPER_SPEED	250
+// 28BYJ data
+#if (MOTOR_ACTIVE_28BYJ == 1)
+int			StepsRequired;					// Number of Steps Required
+boolean     is28ByjEnabled;
+#endif
 
-#define 	ENDS_H_FRONT			9
-#define 	ENDS_H_REAR				8
+/***********************************************************************
+ *                        MACRO DEFINES
+ ***********************************************************************/
+#if (DEBUG_ON == 1)
+#define		SERIAL(x)				Serial.print(x)
+#else
+#define		SERIAL(x)
+#endif
+
+#if (MOTOR_ACTIVE_28BYJ == 1)
+#define     END_DETECTOR_FRONT		9
+#define     END_DETECTOR_REAR		8
+#endif
+
 #define     END_REACHED             LOW
 
-// stepper 28BYJ enable
-bool isStepper28BYJ_Enbaled;
+#if (MOTOR_ACTIVE_28BYJ == 1)
+// 28BYJ data
+#define 	LINE1 					13		// motor 28BYJ driver input line 1
+#define 	LINE2 					12		// motor 28BYJ driver input line 2
+#define 	LINE3 					11		// motor 28BYJ driver input line 3
+#define 	LINE4 					10		// motor 28BYJ driver input line 4
+#define		STEPS_PER_REV			32		// Number of steps per internal motor revolution
+#define 	DEFAULT_STEPS_NUMBER	4
+#define 	DEFAULT_STEPPER_SPEED	200
 
-// Number of steps per internal motor revolution
-const float STEPS_PER_REV = 32;
+// 28BYJ commands
+Stepper 	steppermotor(STEPS_PER_REV, LINE1, LINE3, LINE2, LINE4); // Pins entered in sequence line1-line3-line2-line4 for proper step sequencing
+Motor28BYJ  smallStepper(LINE1, LINE3, LINE2, LINE4);
+#define		Motor_28BYJ_Off()				smallStepper.TurnOff()
+#define		Motor_28BYJ_On()				smallStepper.TurnOn()
+#endif
 
-//  Amount of Gear Reduction
-const float GEAR_RED = 64;
+/***********************************************************************
+ *                        CUSTOM TIMERS
+ ***********************************************************************/
+uint32_t	tm_StepHigh      		= 0;
+uint32_t	tm_StepLow       		= 0;
 
-// Number of steps per geared output rotation
-//const float STEPS_PER_OUT_REV = STEPS_PER_REV * GEAR_RED;
-const float STEPS_PER_OUT_REV = 512;
+#define		TM_STOP_VALUE           0xFFFFFFFF
+#define		TM_START(x)             x = micros()
+#define		TM_STOP(x)              x = TM_STOP_VALUE
+#define		TM_DONE(x,t)            ( (x != TM_STOP_VALUE) && (micros() >= (x+t)) )
 
-// Create Instance of Stepper Class
-// Specify Pins used for motor coils
-// The pins used are 8,9,10,11
-// Connected to ULN2003 Motor Driver In1, In2, In3, In4
-// Pins entered in sequence 1-3-2-4 for proper step sequencing
+/***********************************************************************
+ *                        Private functions
+ ***********************************************************************/
+#if (DEBUG_ON == 1)
+void 	Serial_Process(void);
+#endif
 
-Stepper steppermotor(STEPS_PER_REV, LINE1, LINE3, LINE2, LINE4);
+void 	ReadInputs(void);
+void 	GlobalData_Init(void);
 
-// Number of Steps Required
-int StepsRequired;
+#if (MOTOR_ACTIVE_28BYJ == 1)
+void 	Motor_28BYJ_Process(void);
+#endif
 
-// reverse direction macro
-#define STEPPER_28BYJ_REVERSE()		StepsRequired = (-1) * StepsRequired
-// move exactly a number of steps
-#define	STEPPER_28BYJ_MOVE(nmb)		steppermotor.step((nmb)*StepsRequired)
+/***********************************************************************
+ *                        setup() function
+ ***********************************************************************/
+void setup() {
+	GlobalData_Init();
 
-// Delay between steps
-int StepsDelay;
-
-// Motor speed
-int MotorSpeed;
-int tmpMotorSpeed;
-
-// motor process
-void Motor_Process();
-void ReadInputs();
-void Serial_Process();
-
-void setup()
-{
+#if (DEBUG_ON == 1)
 	Serial.begin(9600);
+#endif
 
-	isStepper28BYJ_Enbaled = true;
-	StepsRequired = DEFAULT_STEPS_NUMBER;
-	StepsDelay = DEFAULT_STEPS_DELAY;
-	MotorSpeed = DEFAULT_STEPPER_SPEED;
+#if (MOTOR_ACTIVE_28BYJ == 1)
+	// Motor 28BYJ setups
+	pinMode(END_DETECTOR_FRONT, INPUT_PULLUP);
+	pinMode(END_DETECTOR_REAR , INPUT_PULLUP);
+	steppermotor.setSpeed(DEFAULT_STEPPER_SPEED);
+	smallStepper.setSpeed(10000);
+#endif
 
-	pinMode(ENDS_H_FRONT, INPUT_PULLUP);
-	pinMode(ENDS_H_REAR , INPUT_PULLUP);
-
-	steppermotor.setSpeed(MotorSpeed);
 	delay(3000);
 }
 
+/***********************************************************************
+ *                        loop() function
+ ***********************************************************************/
 void loop() {
-
-	Serial_Process();
-	Motor_Process();
 	ReadInputs();
+
+#if (MOTOR_ACTIVE_28BYJ == 1)
+	Motor_28BYJ_Process();
+#endif
+
+#if (DEBUG_ON == 1)
+	Serial_Process();
+#endif
 }
 
-void Serial_Process()
+/***********************************************************************
+ *                        ReadInputs() function
+ ***********************************************************************/
+void ReadInputs(void)
 {
-	if (stringComplete) {
-		serialCommand = inputString.substring(0,3);   // the first 3 characters define command type
-		Serial.print(String("\nCmd: ") + serialCommand + " ");
-
-		if(serialCommand == "onn") {
-			isStepper28BYJ_Enbaled = true;
-		}
-		if(serialCommand == "off") {
-			isStepper28BYJ_Enbaled = false;
-		}
-
-		if(serialCommand == "stp") {
-			StepsRequired = inputString.substring(3).toInt();
-		}
-
-		if(serialCommand == "rev") {
-			STEPPER_28BYJ_REVERSE();
-		}
-
-		if(serialCommand == "del") {
-			StepsDelay = inputString.substring(3).toInt();
-		}
-
-		if(serialCommand == "spd") {
-			int tmpMotorSpeed;
-			tmpMotorSpeed = inputString.substring(3).toInt();
-			if(tmpMotorSpeed != MotorSpeed) {
-				MotorSpeed = tmpMotorSpeed;
-				steppermotor.setSpeed(MotorSpeed);
-			}
-		}
-
-		stringComplete = false;
-		while(Serial.read() >= 0) ; // flush the receive buffer
-		inputString = "";
+#if (MOTOR_ACTIVE_28BYJ == 1)
+	if( digitalRead(END_DETECTOR_FRONT ) == END_REACHED) {
+		Ends.Front = 1;
 	}
-}
-
-void Motor_Process()
-{
-	if( isStepper28BYJ_Enbaled ) {
-		steppermotor.step(StepsRequired);
+	else {
+		Ends.Front = 0;
 	}
+
+	if( digitalRead(END_DETECTOR_REAR) == END_REACHED) {
+		Ends.Rear = 1;
+	}
+	else {
+		Ends.Rear = 0;
+	}
+#endif
 }
 
-void ReadInputs()
+/***********************************************************************
+ *                        Serial_Process() function
+ ***********************************************************************/
+#if (DEBUG_ON == 1)
+void Serial_Process(void)
 {
-	if( digitalRead(ENDS_H_FRONT) == LOW)
+    if (stringComplete) {
+        serialCommand = inputString.substring(0,3);   // the first 3 characters define command type
+        #if (DEBUG_ON == 1)
+        Serial.print(String("\nCmd: ") + serialCommand + " ");
+        #endif
+
+        if(serialCommand == "onn") {
+#if (MOTOR_ACTIVE_28BYJ == 1)
+            Motor_28BYJ_On();
+#endif
+        }
+
+        if(serialCommand == "off") {
+#if (MOTOR_ACTIVE_28BYJ == 1)
+            Motor_28BYJ_Off();
+#endif
+        }
+
+        stringComplete = false;
+        while(Serial.read() >= 0) ; // flush the receive buffer
+        inputString = "";
+    }
+}
+#endif
+
+/***********************************************************************
+ *                        Motor_28BYJ_Process() function
+ ***********************************************************************/
+#if (MOTOR_ACTIVE_28BYJ == 1)
+void Motor_28BYJ_Process(void)
+{
+	if( smallStepper.isOn() == false ) {
+		return;
+	}
+
+	if( Ends.Front )
 	{
-		Serial.println("Front stop");
-		STEPPER_28BYJ_REVERSE();
-		STEPPER_28BYJ_MOVE(70);
+		Ends.Front = 0;
+		SERIAL("Front stop");
+		smallStepper.GoBackward();
+		while( digitalRead(END_DETECTOR_FRONT) == END_REACHED ) {
+			// turn back until no end detected
+			smallStepper.stepExactly(40);
+		}
+		return;
+	}
+	else if( Ends.Rear )
+	{
+		Ends.Rear = 0;
+		SERIAL("Rear stop");
+		smallStepper.GoForward();
+		while( digitalRead(END_DETECTOR_REAR) == END_REACHED ) {
+			// turn back until no end detected
+			smallStepper.stepExactly(40);
+		}
+		return;
 	}
 
-	if( digitalRead(ENDS_H_REAR) == LOW)
-	{
-		Serial.println("Rear stop");
-		STEPPER_28BYJ_REVERSE();
-		STEPPER_28BYJ_MOVE(70);
-	}
+	smallStepper.step();
+}
+#endif
+
+/***********************************************************************
+ *                        GlobalData_Init() function
+ ***********************************************************************/
+void GlobalData_Init(void)
+{
+#if (DEBUG_ON == 1)
+	inputString.reserve(200);			// reserve 200 bytes for the inputString:
+#endif
+	Ends.Left  = 0;
+	Ends.Right = 0;
+	Ends.Front = 0;
+	Ends.Rear  = 0;
+
+#if (MOTOR_ACTIVE_28BYJ == 1)
+	// Motor 28BYJ data
+	Motor_28BYJ_On();
+	StepsRequired = DEFAULT_STEPS_NUMBER;
+#endif
 }
 
+/***********************************************************************
+ *                        serialEvent()
+ ***********************************************************************/
+#if (DEBUG_ON == 1)
 void serialEvent() {
-  while (Serial.available()) {
-      char inChar = (char)Serial.read();    // get the new byte:
+	while (Serial.available()) {
+		char inChar = (char)Serial.read();    // get the new byte:
 
-      if (inChar == '\n') {                 // if the incoming character is a newline, set a flag
-        stringComplete = true;              // so the main loop can do something about it:
-      }
-      else {
-        inputString += inChar;              // add it to the inputString:
-      }
-   }
+		if (inChar == '\n') {                 // if the incoming character is a newline, set a flag
+			stringComplete = true;              // so the main loop can do something about it:
+		}
+		else {
+			inputString += inChar;              // add it to the inputString:
+		}
+	}
 }
+#endif
