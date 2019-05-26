@@ -3,8 +3,11 @@
  ***********************************************************************/
 #include <Arduino.h>
 #include <Stepper.h>
+#include "Stepper28BYJ.h"
 
-#define		DEBUG_ON                0		// Compiler switch for Serial commands
+#define		DEBUG_ON                1		// Compiler switch for Serial commands
+#define		MOTOR_ACTIVE_28BYJ	    1		// Compiler switch to deactivate all motor 28BYJ functionality
+#define		MOTOR_ACTIVE_NEMA17		1		// Compiler switch to deactivate all motor Nema17 functionality
 
 typedef struct {
 	int check_Char 		: (sizeof(char			)==1) ? 1 : -1;
@@ -39,11 +42,7 @@ String      serialCommand;
 boolean     isNema17Enabled;
 boolean     isMovingForward = true;			// the motor moving direction
 EndDetector Ends;
-uint32_t	stepSpeed       = 4000;			// delay between steps [us]
-
-// 28BYJ data
-int			StepsRequired;					// Number of Steps Required
-boolean     is28ByjEnabled;
+uint32_t	stepSpeed       = 2500;			// delay between steps [us]
 
 /***********************************************************************
  *                        MACRO DEFINES
@@ -60,8 +59,12 @@ boolean     is28ByjEnabled;
 #define     MOTOR_DIR_PIN           5
 #define     END_DETECTOR_RIGHT      7
 #define     END_DETECTOR_LEFT       6
+
+#if (MOTOR_ACTIVE_28BYJ == 1)
 #define     END_DETECTOR_FRONT		9
 #define     END_DETECTOR_REAR		8
+#endif
+
 #define     END_REACHED             LOW
 
 // Nema17 commands
@@ -73,20 +76,18 @@ boolean     is28ByjEnabled;
 #define     Motor_Nema17_SetDirForward()   	digitalWrite(MOTOR_DIR_PIN, HIGH); isMovingForward = true
 #define     Motor_Nema17_SetDirBackward()	digitalWrite(MOTOR_DIR_PIN, LOW); isMovingForward = false
 #define     Motor_Nema17_StepHigh()        	digitalWrite(MOTOR_STEP_PIN, HIGH)
-#define     Motor_Nema17_StepLow()         	digitalWrite(MOTOR_STEP_PIN, LOW)
+#define     Motor_Nema17_StepLow()			digitalWrite(MOTOR_STEP_PIN, LOW);
 
+#if (MOTOR_ACTIVE_28BYJ == 1)
 // 28BYJ data
 #define 	LINE1 					13		// motor 28BYJ driver input line 1
 #define 	LINE2 					12		// motor 28BYJ driver input line 2
 #define 	LINE3 					11		// motor 28BYJ driver input line 3
 #define 	LINE4 					10		// motor 28BYJ driver input line 4
-#define		STEPS_PER_REV			32		// Number of steps per internal motor revolution
-#define 	DEFAULT_STEPS_NUMBER	4
-#define 	DEFAULT_STEPPER_SPEED	250
 
 // 28BYJ commands
-Stepper 	steppermotor(STEPS_PER_REV, LINE1, LINE3, LINE2, LINE4); // Pins entered in sequence line1-line3-line2-line4 for proper step sequencing
-#define		STEPPER_28BYJ_REVERSE()			StepsRequired = (-1) * StepsRequired
+Stepper28BYJ motor28BYJ(LINE1, LINE3, LINE2, LINE4);
+#endif
 
 /***********************************************************************
  *                        CUSTOM TIMERS
@@ -105,11 +106,16 @@ uint32_t	tm_StepLow       		= 0;
 #if (DEBUG_ON == 1)
 void 	Serial_Process(void);
 #endif
-void 	Motor_Nema17_Process(void);
-void    Nema17_MoveExactly(uint16_t stepNumber);
-void 	Motor_28BYJ_Process(void);
+
 void 	ReadInputs(void);
 void 	GlobalData_Init(void);
+
+void 	Motor_Nema17_Process(void);
+void    Nema17_MoveExactly(uint16_t stepNumber);
+
+#if (MOTOR_ACTIVE_28BYJ == 1)
+void 	Motor_28BYJ_Process(void);
+#endif
 
 /***********************************************************************
  *                        setup() function
@@ -121,26 +127,24 @@ void setup() {
 	Serial.begin(9600);
 #endif
 
-	// setup stepper motor pins
-	pinMode(MOTOR_ENABLE_PIN, OUTPUT);    // enable pin
-	pinMode(MOTOR_DIR_PIN   , OUTPUT);    // step
-	pinMode(MOTOR_STEP_PIN  , OUTPUT);    // direction
-
+#if (MOTOR_ACTIVE_NEMA17 == 1)
+	// Motor Nema17 setups
+	pinMode(MOTOR_ENABLE_PIN, OUTPUT);
+	pinMode(MOTOR_DIR_PIN   , OUTPUT);
+	pinMode(MOTOR_STEP_PIN  , OUTPUT);
 	// setup ends detectors pins
 	pinMode(END_DETECTOR_LEFT , INPUT_PULLUP);
 	pinMode(END_DETECTOR_RIGHT, INPUT_PULLUP);
+#endif
 
+#if (MOTOR_ACTIVE_28BYJ == 1)
 	// Motor 28BYJ setups
 	pinMode(END_DETECTOR_FRONT, INPUT_PULLUP);
 	pinMode(END_DETECTOR_REAR , INPUT_PULLUP);
-	steppermotor.setSpeed(DEFAULT_STEPPER_SPEED);
+	motor28BYJ.setSpeed(10000);
+#endif
 
 	delay(3000);
-
-	Motor_Nema17_On();
-	Motor_Nema17_SetDirForward();
-
-	TM_START(tm_StepHigh);
 }
 
 /***********************************************************************
@@ -148,8 +152,15 @@ void setup() {
  ***********************************************************************/
 void loop() {
 	ReadInputs();
+
+#if (MOTOR_ACTIVE_NEMA17 == 1)
 	Motor_Nema17_Process();
+#endif
+
+#if (MOTOR_ACTIVE_28BYJ == 1)
 	Motor_28BYJ_Process();
+#endif
+
 #if (DEBUG_ON == 1)
 	Serial_Process();
 #endif
@@ -160,6 +171,7 @@ void loop() {
  ***********************************************************************/
 void ReadInputs(void)
 {
+#if (MOTOR_ACTIVE_NEMA17 == 1)
 	if( digitalRead(END_DETECTOR_LEFT ) == END_REACHED) {
 		Ends.Left = 1;
 	}
@@ -173,7 +185,9 @@ void ReadInputs(void)
 	else {
 		Ends.Right = 0;
 	}
-	
+#endif
+
+#if (MOTOR_ACTIVE_28BYJ == 1)
 	if( digitalRead(END_DETECTOR_FRONT ) == END_REACHED) {
 		Ends.Front = 1;
 	}
@@ -187,6 +201,7 @@ void ReadInputs(void)
 	else {
 		Ends.Rear = 0;
 	}
+#endif
 }
 
 /***********************************************************************
@@ -219,26 +234,34 @@ void Serial_Process(void)
 
         if(serialCommand == "onn") {
             Motor_Nema17_On();
+
+#if (MOTOR_ACTIVE_28BYJ == 1)
+            motor28BYJ.TurnOn();
+#endif
         }
 
         if(serialCommand == "off") {
             Motor_Nema17_Off();
+
+#if (MOTOR_ACTIVE_28BYJ == 1)
+            motor28BYJ.TurnOff();
+#endif
         }
 
         if(serialCommand == "spd") {
             Motor_Nema17_SetSpeed( inputString.substring(3).toInt() );
             #if (DEBUG_ON == 1)
-            Serial.print(stepSpeed);
+            SERIAL(stepSpeed);
             #endif
         }
 
         if(serialCommand == ">>>") {
-            Serial.println("Move to right");
+            SERIAL("Move to right\n");
             Motor_Nema17_SetDirForward();
         }
 
         if(serialCommand == "<<<") {
-            Serial.println("Move to left");
+        	SERIAL("Move to left\n");
             Motor_Nema17_SetDirBackward();
         }
 
@@ -258,20 +281,26 @@ void Motor_Nema17_Process(void)
         return;
 
     if( Ends.Left) {
-    	SERIAL("Left stop\n");
 		Motor_Nema17_Off();
-		Motor_Nema17_SetDirForward();
 		delay(1000);
-		//Nema17_MoveExactly(80);
+		SERIAL("Left stop\n");
+		Motor_Nema17_SetDirForward();
+		Nema17_MoveExactly(80);
 		Motor_Nema17_On();
+		TM_STOP(tm_StepLow);
+		TM_START(tm_StepHigh);
+		return; // return because it's possible to spent already to much time here
 	}
     else if( Ends.Right ) {
-    	SERIAL("Right stop\n");
 		Motor_Nema17_Off();
-		Motor_Nema17_SetDirBackward();
 		delay(1000);
-		//Nema17_MoveExactly(80);
+		SERIAL("Right stop\n");
+		Motor_Nema17_SetDirBackward();
+		Nema17_MoveExactly(80);
 		Motor_Nema17_On();
+		TM_STOP(tm_StepLow);
+		TM_START(tm_StepHigh);
+		return; // return because it's possible to spent already to much time here
 	}
 
     // Nema17  -  M A K E   N E X T   S T E P     -  START
@@ -292,25 +321,36 @@ void Motor_Nema17_Process(void)
 /***********************************************************************
  *                        Motor_28BYJ_Process() function
  ***********************************************************************/
+#if (MOTOR_ACTIVE_28BYJ == 1)
 void Motor_28BYJ_Process(void)
 {
-	if( is28ByjEnabled == false ) {
+	if( motor28BYJ.isOn() == false ) {
 		return;
 	}
 
 	if( Ends.Front )
 	{
 		SERIAL("Front stop");
-		STEPPER_28BYJ_REVERSE();
+		motor28BYJ.GoBackward();
+		while( digitalRead(END_DETECTOR_FRONT) == END_REACHED ) {
+			// turn back until no end detected
+			motor28BYJ.stepExactly(20);
+		}
+		return;
 	}
 	else if( Ends.Rear )
 	{
 		SERIAL("Rear stop");
-		STEPPER_28BYJ_REVERSE();
+		motor28BYJ.GoForward();
+		while( digitalRead(END_DETECTOR_REAR) == END_REACHED ) {
+			motor28BYJ.stepExactly(20);
+		}
+		return;
 	}
 
-	steppermotor.step(StepsRequired);
+	motor28BYJ.step();
 }
+#endif
 
 /***********************************************************************
  *                        GlobalData_Init() function
@@ -325,9 +365,17 @@ void GlobalData_Init(void)
 	Ends.Front = 0;
 	Ends.Rear  = 0;
 
+#if (MOTOR_ACTIVE_NEMA17 == 1)
+	// Motor Nema17 data
+	Motor_Nema17_On();
+	Motor_Nema17_SetDirForward();
+	TM_START(tm_StepHigh);
+#endif
+
+#if (MOTOR_ACTIVE_28BYJ == 1)
 	// Motor 28BYJ data
-	is28ByjEnabled = true;
-	StepsRequired = DEFAULT_STEPS_NUMBER;
+	motor28BYJ.TurnOn();
+#endif
 }
 
 /***********************************************************************
