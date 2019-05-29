@@ -9,16 +9,6 @@
 #define		MOTOR_ACTIVE_28BYJ	    1		// Compiler switch to deactivate all motor 28BYJ functionality
 #define		MOTOR_ACTIVE_NEMA17		1		// Compiler switch to deactivate all motor Nema17 functionality
 
-typedef struct {
-	int check_Char 		: (sizeof(char			)==1) ? 1 : -1;
-	int check_Short 	: (sizeof(short			)==2) ? 1 : -1;
-	int check_Int 		: (sizeof(int			)==2) ? 1 : -1;
-	int check_Long 		: (sizeof(long			)==4) ? 1 : -1;
-	int check_Float 	: (sizeof(float 		)==4) ? 1 : -1;
-	int check_Double	: (sizeof(double		)==4) ? 1 : -1;
-	int check_LongLong	: (sizeof(long long		)==8) ? 1 : -1;
-} DataTypesSizeChecker;
-
 /***********************************************************************
  *                        GLOBAL TYPES
  ***********************************************************************/
@@ -40,7 +30,6 @@ String      serialCommand;
 
 // Nema17 data
 boolean     isNema17Enabled;
-boolean     isMovingForward = true;			// the motor moving direction
 EndDetector Ends;
 uint32_t	stepSpeed       = 2500;			// delay between steps [us]
 uint8_t		Nema17_State;
@@ -78,10 +67,10 @@ uint8_t		Nema17_State;
 #define     Motor_Nema17_IsOn       		(isNema17Enabled == true)
 #define     Motor_Nema17_IsOff      		(isNema17Enabled == false)
 #define     Motor_Nema17_SetSpeed(x)       	stepSpeed = (x)
-#define     Motor_Nema17_SetDirForward()   	digitalWrite(MOTOR_DIR_PIN, HIGH); isMovingForward = true
-#define     Motor_Nema17_SetDirBackward()	digitalWrite(MOTOR_DIR_PIN, LOW); isMovingForward = false
+#define     Motor_Nema17_SetDirForward()   	digitalWrite(MOTOR_DIR_PIN, HIGH)
+#define     Motor_Nema17_SetDirBackward()	digitalWrite(MOTOR_DIR_PIN, LOW)
 #define     Motor_Nema17_StepHigh()        	digitalWrite(MOTOR_STEP_PIN, HIGH)
-#define     Motor_Nema17_StepLow()			digitalWrite(MOTOR_STEP_PIN, LOW);
+#define     Motor_Nema17_StepLow()			digitalWrite(MOTOR_STEP_PIN, LOW)
 
 #if (MOTOR_ACTIVE_28BYJ == 1)
 // 28BYJ data
