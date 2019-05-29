@@ -5,9 +5,9 @@
  *      Author: DorinSaramet
  */
 
-#include "Nema17.h"
+#include "Nema17Motor.h"
 
-Nema17::Nema17(uint8_t pinDir, uint8_t pinStep, uint8_t pinEnable)
+Nema17Motor::Nema17Motor(uint8_t pinDir, uint8_t pinStep, uint8_t pinEnable)
 {
 	this->pin_dir = pinDir;
 	this->pin_step = pinStep;
@@ -21,7 +21,7 @@ Nema17::Nema17(uint8_t pinDir, uint8_t pinStep, uint8_t pinEnable)
 	pinMode(pinEnable, OUTPUT);
 }
 
-Nema17::~Nema17() {
+Nema17Motor::~Nema17Motor() {
 	// TODO Auto-generated destructor stub
 }
 

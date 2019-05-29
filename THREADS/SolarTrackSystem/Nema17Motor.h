@@ -5,14 +5,14 @@
  *      Author: DorinSaramet
  */
 
-#ifndef NEMA17_H_
-#define NEMA17_H_
+#ifndef NEMA17MOTOR_H_
+#define NEMA17MOTOR_H_
 
 #include <Arduino.h>
 
 #define DEFAULT_SPEED	((uint16_t) 2500)
 
-class Nema17 {
+class Nema17Motor {
 private:
 	uint8_t		pin_dir;
 	uint8_t		pin_step;
@@ -20,8 +20,8 @@ private:
 	uint16_t 	step_speed; // [us]
 	boolean		is_Enabled;
 public:
-	Nema17(uint8_t pinDir, uint8_t pinStep, uint8_t pinEnable);
-	virtual ~Nema17();
+	Nema17Motor(uint8_t pinDir, uint8_t pinStep, uint8_t pinEnable);
+	virtual ~Nema17Motor();
 
 	inline void setSpeed(uint16_t speed) { this->step_speed = speed; }
 	inline void turnOn() { digitalWrite(this->pin_enable, LOW); this->is_Enabled = true; }
@@ -35,6 +35,7 @@ public:
 		this->stepHigh(); delayMicroseconds(this->step_speed);
 		this->stepLow();  delayMicroseconds(this->step_speed);
 	}
+	inline uint16_t getSpeed() const { return this->step_speed; }
 };
 
-#endif /* NEMA17_H_ */
+#endif /* NEMA17MOTOR_H_ */
