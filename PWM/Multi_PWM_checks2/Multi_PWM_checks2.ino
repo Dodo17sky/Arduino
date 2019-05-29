@@ -1,4 +1,3 @@
-#include <Stepper.h>
 
 /***********************************************************************
  *                        GLOBAL DATA
@@ -7,61 +6,47 @@ String        inputString     = "";             // a String to hold incoming dat
 boolean       stringComplete  = false;          // whether the string is complete
 String        serialCommand;
 
-#define LINE1 9
-#define LINE2 4
-#define LINE3 3
-#define LINE4 2
 
-const int stepsPerRevolution = 200;  // change this to fit the number of steps per revolution
-// for your motor
 
-// initialize the stepper library on pins 8 through 11:
-Stepper myStepper(stepsPerRevolution, LINE1, LINE2, LINE3, LINE4);
+/***********************************************************************
+ *                        Private functions
+ ***********************************************************************/
+ uint8_t Serial_Process(void);
 
-int stepCount = 0;  // number of steps the motor has taken
-int speedMotor = 25;
-int stepsCount = 100;
-bool isOff = false;
+ void setup() {
+  inputString.reserve(200);             // reserve 200 bytes for the inputString:
 
-void setup() {
+  pinMode(10, OUTPUT);
   Serial.begin(9600);
-  analogWrite(10,115);
 }
 
 void loop() {
+    Serial_Process();
+}
 
-  if (stringComplete) {
+uint8_t Serial_Process(void)
+{
+    if (stringComplete) {
         serialCommand = inputString.substring(0,3);   // the first 3 characters define command type
+        #if (DEBUG_ON == 1)
         Serial.print(String("\nCmd: ") + serialCommand + " ");
-
-        if(serialCommand == "rev") {
-            //stepsCount = (-1) * stepsCount;
-            speedMotor = (-1) * speedMotor;
-            Serial.print("turn back ");
-            Serial.println(speedMotor);
-        }
-
-        if(serialCommand == "stp") {
-            isOff = !isOff;
-            Serial.print("State ");
-            Serial.print(isOff);
-        }
+        #endif
 
         if(serialCommand == "spd") {
-            speedMotor = inputString.substring(3).toInt();
-            Serial.print(speedMotor);
+            int inByte = inputString.substring(3).toInt();
+            if(inByte >= 0 && inByte <=255) {
+              analogWrite(10, inByte);
+              Serial.print("Set pwm to ");
+              Serial.println(inByte);
+            }
         }
 
+       
         stringComplete = false;
         while(Serial.read() >= 0) ; // flush the receive buffer
         inputString = "";
     }
-    
-  if (speedMotor > 0 && isOff) {
-    myStepper.setSpeed(speedMotor);
-    myStepper.step(-100);
-    delay(2000);
-  }
+    return 0;
 }
 
 void serialEvent() {
@@ -76,5 +61,3 @@ void serialEvent() {
       }
    }
 }
-
-
