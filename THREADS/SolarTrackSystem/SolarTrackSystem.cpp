@@ -3,6 +3,8 @@
  ***********************************************************************/
 #include <Arduino.h>
 #include <Stepper.h>
+
+#include "Nema17Motor.h"
 #include "Stepper28BYJ.h"
 
 #define		DEBUG_ON                1		// Compiler switch for Serial commands
@@ -27,12 +29,6 @@ String      inputString     = "";           // a String to hold incoming data
 boolean     stringComplete  = false;        // whether the string is complete
 String      serialCommand;
 #endif
-
-// Nema17 data
-boolean     isNema17Enabled;
-EndDetector Ends;
-uint32_t	stepSpeed       = 2500;			// delay between steps [us]
-uint8_t		Nema17_State;
 
 /***********************************************************************
  *                        MACRO DEFINES
@@ -61,17 +57,6 @@ uint8_t		Nema17_State;
 #define		NEMA17_END_LEFT			2
 #define		NEMA17_END_RIGHT		3
 
-// Nema17 commands
-#define     Motor_Nema17_On()       		digitalWrite(MOTOR_ENABLE_PIN, LOW); isNema17Enabled = true
-#define     Motor_Nema17_Off()      		digitalWrite(MOTOR_ENABLE_PIN, HIGH); isNema17Enabled = false
-#define     Motor_Nema17_IsOn       		(isNema17Enabled == true)
-#define     Motor_Nema17_IsOff      		(isNema17Enabled == false)
-#define     Motor_Nema17_SetSpeed(x)       	stepSpeed = (x)
-#define     Motor_Nema17_SetDirForward()   	digitalWrite(MOTOR_DIR_PIN, HIGH)
-#define     Motor_Nema17_SetDirBackward()	digitalWrite(MOTOR_DIR_PIN, LOW)
-#define     Motor_Nema17_StepHigh()        	digitalWrite(MOTOR_STEP_PIN, HIGH)
-#define     Motor_Nema17_StepLow()			digitalWrite(MOTOR_STEP_PIN, LOW)
-
 #if (MOTOR_ACTIVE_28BYJ == 1)
 // 28BYJ data
 #define 	LINE1 					13		// motor 28BYJ driver input line 1
@@ -81,6 +66,15 @@ uint8_t		Nema17_State;
 
 // 28BYJ commands
 Stepper28BYJ motor28BYJ(LINE1, LINE3, LINE2, LINE4);
+#endif
+
+#if (MOTOR_ACTIVE_NEMA17 == 1)
+// Nema17 data
+Nema17Motor Nema17(MOTOR_DIR_PIN, MOTOR_STEP_PIN, MOTOR_ENABLE_PIN);
+EndDetector Ends;
+uint8_t		Nema17_State;
+uint16_t 	stepSpeed;
+uint8_t		endsSteps;
 #endif
 
 /***********************************************************************
@@ -107,7 +101,10 @@ void 	ReadInputs(void);
 void 	GlobalData_Init(void);
 
 void 	Motor_Nema17_Process(void);
-void    Nema17_MoveExactly(uint16_t stepNumber);
+void	Motor_Nema17_Inactive();
+void	Motor_Nema17_Active();
+void	Motor_Nema17_Left();
+void	Motor_Nema17_Right();
 
 #if (MOTOR_ACTIVE_28BYJ == 1)
 void 	Motor_28BYJ_Process(void);
@@ -124,10 +121,6 @@ void setup() {
 #endif
 
 #if (MOTOR_ACTIVE_NEMA17 == 1)
-	// Motor Nema17 setups
-	pinMode(MOTOR_ENABLE_PIN, OUTPUT);
-	pinMode(MOTOR_DIR_PIN   , OUTPUT);
-	pinMode(MOTOR_STEP_PIN  , OUTPUT);
 	// setup ends detectors pins
 	pinMode(END_DETECTOR_LEFT , INPUT_PULLUP);
 	pinMode(END_DETECTOR_RIGHT, INPUT_PULLUP);
@@ -167,6 +160,8 @@ void loop() {
  ***********************************************************************/
 void ReadInputs(void)
 {
+	stepSpeed = Nema17.getSpeed();
+
 #if (MOTOR_ACTIVE_NEMA17 == 1)
 	if( digitalRead(END_DETECTOR_LEFT ) == END_REACHED) {
 		Ends.Left = 1;
@@ -204,21 +199,6 @@ void ReadInputs(void)
 #endif
 }
 
-/***********************************************************************
- *                        MoveExactly() function
- ***********************************************************************/
-void Nema17_MoveExactly(uint16_t stepNumber)
-{
-    Motor_Nema17_On();
-    for(uint16_t s=0; s<stepNumber; s++)
-    {
-        Motor_Nema17_StepHigh();
-        delayMicroseconds(stepSpeed);
-        Motor_Nema17_StepLow();
-        delayMicroseconds(stepSpeed);
-    }
-    Motor_Nema17_Off();
-}
 
 /***********************************************************************
  *                        Serial_Process() function
@@ -233,38 +213,37 @@ void Serial_Process(void)
         #endif
 
         if(serialCommand == "onn") {
-            Motor_Nema17_On();
+        	Nema17.turnOn();
             Nema17_State = NEMA17_ACTIVE;
-
 #if (MOTOR_ACTIVE_28BYJ == 1)
             motor28BYJ.TurnOn();
 #endif
         }
 
         if(serialCommand == "off") {
-            Motor_Nema17_Off();
+            Nema17.turnOff();
             Nema17_State = NEMA17_INACTIVE;
-
 #if (MOTOR_ACTIVE_28BYJ == 1)
             motor28BYJ.TurnOff();
 #endif
         }
 
         if(serialCommand == "spd") {
-            Motor_Nema17_SetSpeed( inputString.substring(3).toInt() );
+        	int tmpSpeed = inputString.substring(3).toInt();
+        	Nema17.setSpeed(tmpSpeed);
             #if (DEBUG_ON == 1)
-            SERIAL(stepSpeed);
+            SERIAL(tmpSpeed);
             #endif
         }
 
         if(serialCommand == ">>>") {
             SERIAL("Move to right\n");
-            Motor_Nema17_SetDirForward();
+            Nema17.goForward();
         }
 
         if(serialCommand == "<<<") {
         	SERIAL("Move to left\n");
-            Motor_Nema17_SetDirBackward();
+            Nema17.goBackward();
         }
 
         stringComplete = false;
@@ -279,84 +258,116 @@ void Serial_Process(void)
  ***********************************************************************/
 void Motor_Nema17_Process(void)
 {
-	static uint8_t endsSteps = 0;
+	switch(Nema17_State) {
+		case NEMA17_INACTIVE:
+			Motor_Nema17_Inactive();
+			break;
+		case NEMA17_ACTIVE:
+			Motor_Nema17_Active();
+			break;
+		case NEMA17_END_LEFT:
+			Motor_Nema17_Left();
+			break;
+		case NEMA17_END_RIGHT:
+			Motor_Nema17_Right();
+			break;
+		default:
+			break;
+	}
+}
 
-    if( Nema17_State==NEMA17_INACTIVE ) {
-        return;
-    }
+/***********************************************************************
+ *                        Motor_Nema17_Inactive() function
+ ***********************************************************************/
+void	Motor_Nema17_Inactive()
+{
+	if( Nema17_State != NEMA17_INACTIVE ) {
+		return;
+	}
+}
 
-    else if( Nema17_State==NEMA17_END_LEFT ) {
-    	Motor_Nema17_Off();
-    	TM_START(tm_EndLeft);
-    	if(TM_DONE(tm_EndLeft,3000*1000)) {
-    		Motor_Nema17_SetDirForward();
-    		Motor_Nema17_On();
-    		// Nema17  -  M A K E   N E X T   S T E P     -  START
-			if( TM_DONE(tm_StepHigh, stepSpeed) ) {
-				Motor_Nema17_StepHigh();
-				TM_STOP(tm_StepHigh);
-				TM_START(tm_StepLow);
-			}
+/***********************************************************************
+ *                        Motor_Nema17_Active() function
+ ***********************************************************************/
+void	Motor_Nema17_Active()
+{
+	// Nema17  -  M A K E   N E X T   S T E P     -  START
+	if( TM_DONE(tm_StepHigh, stepSpeed) ) {
+		Nema17.stepHigh();
+		TM_STOP(tm_StepHigh);
+		TM_START(tm_StepLow);
+	}
 
-			if( TM_DONE(tm_StepLow, stepSpeed) ) {
-				Motor_Nema17_StepLow();
-				TM_STOP(tm_StepLow);
-				TM_START(tm_StepHigh);
-				endsSteps++;
-			}
-			// Nema17  -  M A K E   N E X T   S T E P     -  STOP
-			if(endsSteps == 80) {
-				endsSteps = 0;
-				Nema17_State = NEMA17_ACTIVE;
-				TM_STOP(tm_EndLeft);
-			}
-    	}
-    }
+	if( TM_DONE(tm_StepLow, stepSpeed) ) {
+		Nema17.stepLow();
+		TM_STOP(tm_StepLow);
+		TM_START(tm_StepHigh);
+	}
+	// Nema17  -  M A K E   N E X T   S T E P     -  STOP
+}
 
-    else if( Nema17_State==NEMA17_END_RIGHT ) {
-    	Motor_Nema17_Off();
-		TM_START(tm_EndRight);
-		if(TM_DONE(tm_EndRight,3000*1000)) {
-			Motor_Nema17_SetDirBackward();
-			Motor_Nema17_On();
-			// Nema17  -  M A K E   N E X T   S T E P     -  START
-			if( TM_DONE(tm_StepHigh, stepSpeed) ) {
-				Motor_Nema17_StepHigh();
-				TM_STOP(tm_StepHigh);
-				TM_START(tm_StepLow);
-			}
-
-			if( TM_DONE(tm_StepLow, stepSpeed) ) {
-				Motor_Nema17_StepLow();
-				TM_STOP(tm_StepLow);
-				TM_START(tm_StepHigh);
-				endsSteps++;
-			}
-			// Nema17  -  M A K E   N E X T   S T E P     -  STOP
-			if(endsSteps == 80) {
-				endsSteps = 0;
-				Nema17_State = NEMA17_ACTIVE;
-				TM_STOP(tm_EndRight);
-			}
-		}
-    }
-
-    else {
-    	// Nema17  -  M A K E   N E X T   S T E P     -  START
+/***********************************************************************
+ *                        Motor_Nema17_Left() function
+ ***********************************************************************/
+void	Motor_Nema17_Left()
+{
+	Nema17.turnOff();
+	TM_START(tm_EndLeft);
+	if(TM_DONE(tm_EndLeft,3000000)) {
+		Nema17.goForward();
+		Nema17.turnOn();
+		// Nema17  -  M A K E   N E X T   S T E P     -  START
 		if( TM_DONE(tm_StepHigh, stepSpeed) ) {
-			Motor_Nema17_StepHigh();
+			Nema17.stepHigh();
 			TM_STOP(tm_StepHigh);
 			TM_START(tm_StepLow);
 		}
 
 		if( TM_DONE(tm_StepLow, stepSpeed) ) {
-			Motor_Nema17_StepLow();
+			Nema17.stepLow();
 			TM_STOP(tm_StepLow);
 			TM_START(tm_StepHigh);
+			endsSteps++;
 		}
 		// Nema17  -  M A K E   N E X T   S T E P     -  STOP
-    }
+		if(endsSteps == 80) {
+			endsSteps = 0;
+			Nema17_State = NEMA17_ACTIVE;
+			TM_STOP(tm_EndLeft);
+		}
+	}
+}
 
+/***********************************************************************
+ *                        Motor_Nema17_Right() function
+ ***********************************************************************/
+void	Motor_Nema17_Right()
+{
+	Nema17.turnOff();
+	TM_START(tm_EndRight);
+	if(TM_DONE(tm_EndRight,3000000)) {
+		Nema17.goBackward();
+		Nema17.turnOn();
+		// Nema17  -  M A K E   N E X T   S T E P     -  START
+		if( TM_DONE(tm_StepHigh, stepSpeed) ) {
+			Nema17.stepHigh();
+			TM_STOP(tm_StepHigh);
+			TM_START(tm_StepLow);
+		}
+
+		if( TM_DONE(tm_StepLow, stepSpeed) ) {
+			Nema17.stepLow();
+			TM_STOP(tm_StepLow);
+			TM_START(tm_StepHigh);
+			endsSteps++;
+		}
+		// Nema17  -  M A K E   N E X T   S T E P     -  STOP
+		if(endsSteps == 80) {
+			endsSteps = 0;
+			Nema17_State = NEMA17_ACTIVE;
+			TM_STOP(tm_EndRight);
+		}
+	}
 }
 
 /***********************************************************************
@@ -408,13 +419,14 @@ void GlobalData_Init(void)
 
 #if (MOTOR_ACTIVE_NEMA17 == 1)
 	// Motor Nema17 data
-	Motor_Nema17_On();
-	Motor_Nema17_SetDirBackward();
+	Nema17.turnOn();
+	Nema17.goBackward();
 	TM_START(tm_StepHigh);
 	TM_STOP(tm_StepLow);
 	TM_STOP(tm_EndLeft);
 	TM_STOP(tm_EndRight);
 	Nema17_State = NEMA17_ACTIVE;
+	endsSteps = 0;
 #endif
 
 #if (MOTOR_ACTIVE_28BYJ == 1)
