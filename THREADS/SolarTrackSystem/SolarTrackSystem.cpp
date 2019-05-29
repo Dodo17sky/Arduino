@@ -6,6 +6,7 @@
 
 #include "Nema17Motor.h"
 #include "Stepper28BYJ.h"
+#include "LdrSensor.h"
 
 #define		DEBUG_ON                1		// Compiler switch for Serial commands
 #define		MOTOR_ACTIVE_28BYJ	    1		// Compiler switch to deactivate all motor 28BYJ functionality
@@ -38,6 +39,10 @@ String      serialCommand;
 #else
 #define		SERIAL(x)
 #endif
+
+#define		LDR_PIN_H				A5
+#define		LDR_PIN_C				A4
+#define		LDR_PIN_V				A3
 
 // Nema17 data
 #define     MOTOR_ENABLE_PIN        3
@@ -76,6 +81,8 @@ uint8_t		Nema17_State;
 uint16_t 	stepSpeed;
 uint8_t		endsSteps;
 #endif
+
+LdrSensor	ldr(LDR_PIN_H, LDR_PIN_V, LDR_PIN_C);
 
 /***********************************************************************
  *                        CUSTOM TIMERS
@@ -160,6 +167,9 @@ void loop() {
  ***********************************************************************/
 void ReadInputs(void)
 {
+	ldr.readAll();
+	ldr.printValues();
+
 	stepSpeed = Nema17.getSpeed();
 
 #if (MOTOR_ACTIVE_NEMA17 == 1)
@@ -382,7 +392,6 @@ void Motor_28BYJ_Process(void)
 
 	if( Ends.Front )
 	{
-		SERIAL("Front stop");
 		motor28BYJ.GoBackward();
 		while( digitalRead(END_DETECTOR_FRONT) == END_REACHED ) {
 			// turn back until no end detected
@@ -392,7 +401,6 @@ void Motor_28BYJ_Process(void)
 	}
 	else if( Ends.Rear )
 	{
-		SERIAL("Rear stop");
 		motor28BYJ.GoForward();
 		while( digitalRead(END_DETECTOR_REAR) == END_REACHED ) {
 			motor28BYJ.stepExactly(20);
