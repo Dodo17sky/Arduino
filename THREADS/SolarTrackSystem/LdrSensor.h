@@ -14,6 +14,10 @@
 #define LDR_READ_SAMPLES	(20)
 #define LDR_PRINT_DELAY		(2000)		// [ms]
 
+#define	LDR_DIR_TO_LEFT		((int8_t)(-1))
+#define	LDR_DIR_NO_DIR		((int8_t)( 0))
+#define	LDR_DIR_TO_RIGHT	((int8_t)( 1))
+
 class LdrSensor {
 private:
 	uint8_t ldr_pin_H;
@@ -24,6 +28,12 @@ private:
 	uint16_t ldrValueV;
 	uint16_t ldrValueC;
 
+	uint16_t ldrCalibrationH;
+	uint16_t ldrCalibrationV;
+	uint16_t ldrCalibrationC;
+
+	uint16_t ldrMinDifference;
+
 	uint32_t lastPrintTimestamp;
 
 public:
@@ -32,6 +42,14 @@ public:
 
 	void readAll();
 	void printValues();
+
+	int8_t getDirectionV();
+	uint16_t getDeltaV();
+
+	void setMinDifference(uint16_t minDiff) { this->ldrMinDifference = minDiff; }
+	void setCalibrationH(uint16_t calibH) { this->ldrCalibrationH = calibH; }
+	void setCalibrationV(uint16_t calibV) { this->ldrCalibrationV = calibV; }
+	void setCalibrationC(uint16_t calibC) { this->ldrCalibrationC = calibC; }
 };
 
 #endif /* LDRSENSOR_H_ */
