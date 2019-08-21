@@ -20,7 +20,7 @@ LdrSensor::LdrSensor(uint8_t ldrPinH, uint8_t ldrPinV, uint8_t ldrPinC) {
 	this->ldrCalibrationV = 0;
 	this->ldrCalibrationC = 0;
 
-	this->ldrMinDifference = 20;
+	this->ldrMinDifference = 15;
 	this->lastPrintTimestamp = 0;
 }
 
@@ -63,11 +63,33 @@ void LdrSensor::printValues() {
 	}
 	this->lastPrintTimestamp = timestamp;
 
+	String msg = "";
+	if(ldrValueC > ldrValueV) {
+		msg += String("to right ");
+		msg += String(ldrValueC - ldrValueV);
+	}
+	else {
+		msg += String("to left ");
+		msg += String(ldrValueV - ldrValueC);
+	}
+
+	msg += String("         ");
+	if(ldrValueC > ldrValueH) {
+		msg += String("to down ");
+		msg += String(ldrValueC - ldrValueH);
+	}
+	else {
+		msg += String("to up ");
+		msg += String(ldrValueH - ldrValueC);
+	}
+
+	/*
 	log += String("H: ") + String(this->ldrValueH) + String("    ");
 	log += String("C: ") + String(this->ldrValueC) + String("    ");
 	log += String("V: ") + String(this->ldrValueV);
+	*/
 
-	Serial.println(log);
+	Serial.println(msg);
 }
 
 int8_t LdrSensor::getDirectionV() {
@@ -95,16 +117,28 @@ int8_t LdrSensor::getDirectionV() {
 	return dirToGo;
 }
 
-uint16_t LdrSensor::getDeltaV() {
-	uint16_t diffBetweenLdr = abs(this->ldrValueV - this->ldrValueC);
+int8_t LdrSensor::getDirectionH() {
+	int8_t  dirToGo = LDR_DIR_NO_DIR;
+	uint16_t diffBetweenLdr = abs((int)this->ldrValueH - (int)this->ldrValueC);
 
 	if( diffBetweenLdr >= this->ldrMinDifference ) {
-		// difference is substantial
-		// return diffBetweenLdr
+		// We have a up or down direction only if the difference between sensors
+		// is greater then LDR_MIN_DIFFERENCE
+
+		if( this->ldrValueH > this->ldrValueC ) {
+			// move to the left
+			dirToGo = LDR_DIR_TO_UP;
+		}
+		else {
+			// move to the right
+			dirToGo = LDR_DIR_TO_DOWN;
+		}
 	}
 	else {
-		diffBetweenLdr = 0;
+		// ignore sensors difference smaller then LDR_MIN_DIFFERENCE
+		// the motor movements may became unstable due to sensors reading errors
 	}
 
-	return diffBetweenLdr;
+	return dirToGo;
 }
+

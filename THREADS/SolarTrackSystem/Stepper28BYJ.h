@@ -42,6 +42,7 @@ public:
 	inline void GoForward() { this->direction = DIRECTION_FORWARD; }
 	inline void GoBackward() { this->direction = DIRECTION_BACKWARD; }
 	inline boolean isOn()	{ return this->isEnabled; }
+	inline boolean isOff()	{ return (!this->isEnabled); }
 };
 
 #endif /* STEPPER28BYJ_H_ */

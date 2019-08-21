@@ -11,12 +11,14 @@
 #include <Arduino.h>
 
 #define LDR_INVALID_VALUE	( (uint16_t) 0xFFFF )
-#define LDR_READ_SAMPLES	(20)
+#define LDR_READ_SAMPLES	(3)
 #define LDR_PRINT_DELAY		(2000)		// [ms]
 
+#define	LDR_DIR_TO_DOWN		((int8_t)(-1))
 #define	LDR_DIR_TO_LEFT		((int8_t)(-1))
 #define	LDR_DIR_NO_DIR		((int8_t)( 0))
 #define	LDR_DIR_TO_RIGHT	((int8_t)( 1))
+#define	LDR_DIR_TO_UP		((int8_t)( 1))
 
 class LdrSensor {
 private:
@@ -44,7 +46,7 @@ public:
 	void printValues();
 
 	int8_t getDirectionV();
-	uint16_t getDeltaV();
+	int8_t getDirectionH();
 
 	void setMinDifference(uint16_t minDiff) { this->ldrMinDifference = minDiff; }
 	void setCalibrationH(uint16_t calibH) { this->ldrCalibrationH = calibH; }
