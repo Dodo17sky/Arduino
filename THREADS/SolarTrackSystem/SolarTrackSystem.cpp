@@ -8,27 +8,13 @@
 #include "Stepper28BYJ.h"
 #include "LdrSensor.h"
 
-#define		DEBUG_ON                0		// Compiler switch for Serial commands
 #define		MOTOR_ACTIVE_28BYJ	    1		// Compiler switch to deactivate all motor 28BYJ functionality
 #define		MOTOR_ACTIVE_NEMA17		1		// Compiler switch to deactivate all motor Nema17 functionality
 
 /***********************************************************************
- *                        GLOBAL DATA
- ***********************************************************************/
-#if (DEBUG_ON == 1)
-String      inputString     = "";           // a String to hold incoming data
-boolean     stringComplete  = false;        // whether the string is complete
-String      serialCommand;
-#endif
-
-/***********************************************************************
  *                        MACRO DEFINES
  ***********************************************************************/
-#if (DEBUG_ON == 1)
 #define		SERIAL(x)				Serial.print(x)
-#else
-#define		SERIAL(x)
-#endif
 
 #define		LDR_PIN_H				A5
 #define		LDR_PIN_C				A4
@@ -86,10 +72,6 @@ LdrSensor	ldr(LDR_PIN_H, LDR_PIN_V, LDR_PIN_C);
 /***********************************************************************
  *                        Private functions
  ***********************************************************************/
-#if (DEBUG_ON == 1)
-void 	Serial_Process(void);
-#endif
-
 void 	ReadInputs(void);
 void 	GlobalData_Init(void);
 
@@ -117,10 +99,6 @@ void	Motor_28BYJ_ToUp();
  ***********************************************************************/
 void setup() {
 	GlobalData_Init();
-
-#if (DEBUG_ON == 1)
-	Serial.begin(115200);
-#endif
 
 #if (MOTOR_ACTIVE_NEMA17 == 1)
 	// setup ends detectors pins
@@ -153,10 +131,6 @@ void loop() {
 
 #if (MOTOR_ACTIVE_28BYJ == 1)
 	Motor_28BYJ_Process();
-#endif
-
-#if (DEBUG_ON == 1)
-	Serial_Process();
 #endif
 }
 
@@ -210,82 +184,6 @@ void ReadInputs_28BYJ(void)
 	if( digitalRead(END_DETECTOR_REAR) == END_REACHED) {
 		Motor28BYJ_State = MOTOR28BYJ_END_UP;
 	}
-}
-#endif
-
-/***********************************************************************
- *                        Serial_Process() function
- ***********************************************************************/
-#if (DEBUG_ON == 1)
-void Serial_Process(void)
-{
-    if (stringComplete) {
-        serialCommand = inputString.substring(0,3);   // the first 3 characters define command type
-        #if (DEBUG_ON == 1)
-        Serial.print(String("\nCmd: ") + serialCommand + " ");
-        #endif
-
-        if(serialCommand == "onn") {
-#if (MOTOR_ACTIVE_NEMA17 == 1)
-        	Nema17.turnOn();
-#endif
-#if (MOTOR_ACTIVE_28BYJ == 1)
-            motor28BYJ.TurnOn();
-#endif
-        }
-
-        if(serialCommand == "off") {
-#if (MOTOR_ACTIVE_NEMA17 == 1)
-            Nema17.turnOff();
-            Nema17_State = MOTOR_INACTIVE;
-#endif
-#if (MOTOR_ACTIVE_28BYJ == 1)
-            motor28BYJ.TurnOff();
-#endif
-        }
-
-        if(serialCommand == "spd") {
-        	int tmpSpeed = inputString.substring(3).toInt();
-#if (MOTOR_ACTIVE_NEMA17 == 1)
-        	Nema17.setSpeed(tmpSpeed);
-#endif
-            #if (DEBUG_ON == 1)
-        	SERIAL("Speed = ");
-            SERIAL(tmpSpeed);
-            #endif
-        }
-
-#if (MOTOR_ACTIVE_NEMA17 == 1)
-        if(serialCommand == ">>>") {
-            SERIAL("Move to right\n");
-            Nema17.goForward();
-        }
-        if(serialCommand == "<<<") {
-        	SERIAL("Move to left\n");
-            Nema17.goBackward();
-        }
-#endif
-        if(serialCommand == "min") {
-        	int data = inputString.substring(3).toInt();
-			ldr.setMinDifference(data);
-		}
-        if(serialCommand == "cah") {
-			int data = inputString.substring(3).toInt();
-			ldr.setCalibrationH(data);
-		}
-        if(serialCommand == "cav") {
-			int data = inputString.substring(3).toInt();
-			ldr.setCalibrationV(data);
-		}
-        if(serialCommand == "cac") {
-			int data = inputString.substring(3).toInt();
-			ldr.setCalibrationC(data);
-		}
-
-        stringComplete = false;
-        while(Serial.read() >= 0) ; // flush the receive buffer
-        inputString = "";
-    }
 }
 #endif
 
@@ -467,10 +365,6 @@ void Motor_28BYJ_ToUp()
  ***********************************************************************/
 void GlobalData_Init(void)
 {
-#if (DEBUG_ON == 1)
-	inputString.reserve(200);			// reserve 200 bytes for the inputString:
-#endif
-
 #if (MOTOR_ACTIVE_NEMA17 == 1)
 	// Motor Nema17 data
 	Nema17.turnOn();
@@ -483,21 +377,3 @@ void GlobalData_Init(void)
 	motor28BYJ.TurnOn();
 #endif
 }
-
-/***********************************************************************
- *                        serialEvent()
- ***********************************************************************/
-#if (DEBUG_ON == 1)
-void serialEvent() {
-	while (Serial.available()) {
-		char inChar = (char)Serial.read();    // get the new byte:
-
-		if (inChar == '\n') {                 // if the incoming character is a newline, set a flag
-			stringComplete = true;              // so the main loop can do something about it:
-		}
-		else {
-			inputString += inChar;              // add it to the inputString:
-		}
-	}
-}
-#endif
