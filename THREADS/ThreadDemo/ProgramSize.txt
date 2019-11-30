@@ -18,3 +18,9 @@ Initial RAM usage: 245 of maximum 2048 bytes
 -----------------------
 Program store usage: 5415 of maximum 32256 bytes
 Initial RAM usage: 366 of maximum 2048 bytes
+
+-------------------------------------------------------------------------
+11.05.2019: Running 3 threads
+-----------------------
+Program store usage: 5161 of maximum 32256 bytes
+Initial RAM usage: 333 of maximum 2048 bytes
