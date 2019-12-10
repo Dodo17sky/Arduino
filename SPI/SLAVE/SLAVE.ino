@@ -1,71 +1,100 @@
-#define LED_PIN  9
- 
-volatile uint8_t led_blink = 1;
-volatile uint8_t spiDataOld = 0;
-volatile uint8_t spiData = 0;
- 
-ISR(SPI_STC_vect)
-{
-    uint8_t data_byte = SPDR;
-    spiData = data_byte;
-    
-    switch (data_byte)
-    {
-        case '0':
-            led_blink = 0;
-            SPDR = 0;  
-        break;
-        case '1':
-            led_blink = 1;
-            SPDR = 0;  
-        break;
-        case '?':
-            // Place LED blinking status in SPDR register for next transfer
-            SPDR = led_blink;  
-        break;
-    }
-}
- 
-void setup()
-{
+#include <SPI.h>
+/***********************************************************************
+ *                        GLOBAL DATA
+ ***********************************************************************/
+String            inputString     = "";             // a String to hold incoming data
+boolean           stringComplete  = false;          // whether the string is complete
+volatile uint8_t  spiDataOld      = 0;
+volatile uint8_t  spiData         = 0;
+
+static int        idx             = 0;
+
+/***********************************************************************
+ *                        MACRO DEFINES
+ ***********************************************************************/
+
+/***********************************************************************
+ *                        Private functions
+ ***********************************************************************/
+void Serial_Process(void);
+void SPI_Process(void);
+
+ /***********************************************************************
+  *                        setup() function
+  ***********************************************************************/
+ void setup() {
+    inputString.reserve(200);
     Serial.begin(115200);
-    pinMode(LED_PIN, OUTPUT);
- 
-    // Set MISO pin as output
-    pinMode(MISO, OUTPUT);
+
+    SPI.beginTransaction(SPISettings(20000000, MSBFIRST, SPI_MODE0));
     
-    // Turn on SPI in slave mode
-    SPCR |= (1 << SPE);
-    // Turn on interrupt
-    SPCR |= (1 << SPIE);
+    // Setup SPI
+    pinMode(MISO, OUTPUT);  // Set MISO pin as output
+    SPCR |= (1 << SPE);     // Turn on SPI in slave mode
+    SPCR |= (1 << SPIE);    // Turn on interrupt
 }
- 
-void loop() 
+
+ /***********************************************************************
+  *                        loop() function
+  ***********************************************************************/
+void loop() {
+    Serial_Process();
+    SPI_Process();
+}
+
+/***********************************************************************
+ *                        Serial_Process()
+ ***********************************************************************/
+void Serial_Process(void)
+{
+    if (stringComplete) {
+        Serial.println(inputString);
+
+        
+        stringComplete = false;
+        while(Serial.read() >= 0) ; // flush the receive buffer
+        inputString = "";
+    }
+    return 0;
+}
+
+/***********************************************************************
+ *                        SPI_Process
+ ***********************************************************************/
+void SPI_Process(void)
 {
     if(spiDataOld != spiData)
     {
         spiDataOld = spiData;
-        if(spiData == 0x01)
+        
+        Serial.print(String(" ") + String(spiData));
+        if(spiData == 255)
         {
-          Serial.print("\n");
-          Serial.print(millis());
-          Serial.print(": ");
-          Serial.print(spiData);
-        }
-        else
-        {
-          Serial.print(", ");
-          Serial.print(spiData);
+            Serial.println("");
         }
     }
-    
-    // If LED blink status is on, then blink LED for 250ms
-    if (spiData == 8)
-    {
-        digitalWrite(LED_PIN, HIGH);
-    }
-    else if (spiData == 6)
-    {
-        digitalWrite(LED_PIN, LOW); 
-    }
+}
+
+/***********************************************************************
+ *                        serialEvent()
+ ***********************************************************************/
+void serialEvent() {
+  while (Serial.available()) {
+      char inChar = (char)Serial.read();    // get the new byte:
+
+      if (inChar == '\n') {                 // if the incoming character is a newline, set a flag
+        stringComplete = true;              // so the main loop can do something about it:
+      }
+      else {
+        inputString += inChar;              // add it to the inputString:
+      }
+   }
+}
+
+/***********************************************************************
+ *                        ISR for SPI RX event
+ ***********************************************************************/
+ISR(SPI_STC_vect)
+{
+    spiData = SPDR;
 }
